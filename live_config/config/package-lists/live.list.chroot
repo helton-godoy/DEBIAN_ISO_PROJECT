@@ -1,0 +1,28 @@
+# Pacotes essenciais para o ambiente Live com suporte a ZFS
+zfsutils-linux
+gdisk
+dosfstools
+curl
+kpartx
+patch
+rsync
+uuid-runtime
+binutils
+live-boot
+live-config
+live-config-systemd
+parted
+
+# ZFSBootMenu & System Install Utils
+kexec-tools
+efibootmgr
+cpio
+zstd
+perl
+bash-completion
+debootstrap
+dpkg-dev
+debian-archive-keyring
+ca-certificates
+openssl
+wget

@@ -20,4 +20,4 @@ RUN apt-get update && \
 WORKDIR /project
 
 # Script de entrada para executar o build
-CMD ["lb", "build"]
+CMD lb clean && lb build

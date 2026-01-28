@@ -1,0 +1,15 @@
+# Pacotes para o sistema NAS de destino (instalado via script)
+zfsutils-linux
+zfs-dkms
+linux-headers-amd64
+samba
+winbind
+libnss-winbind
+libpam-winbind
+nfs4-acl-tools
+acl
+attr
+nano
+network-manager
+iproute2
+ssh

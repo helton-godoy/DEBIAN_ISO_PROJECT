@@ -5,7 +5,7 @@
 # Data: 2026-01-28
 
 VM_NAME="debian-zfs-lab"
-ISO_PATH="./live/live-image-amd64.hybrid.iso"
+ISO_PATH="./live_build/live-image-amd64.hybrid.iso"
 DISK_PATH="/var/lib/libvirt/images/${VM_NAME}.qcow2"
 DISK_SIZE="20" # GB
 RAM="4096"
@@ -25,7 +25,7 @@ fi
 
 if [ ! -f "$ISO_PATH" ]; then
     echo "ALERTA: ISO não encontrada em $ISO_PATH."
-    echo "Certifique-se de rodar o ./build_in_docker.sh primeiro."
+    echo "Certifique-se de rodar o ./build_live.sh primeiro."
     read -p "Deseja continuar mesmo assim? (s/n) " -n 1 -r
     echo
     if [[ ! $REPLY =~ ^[Ss]$ ]]; then exit 1; fi
@@ -53,12 +53,12 @@ virt-install \
   --name "$VM_NAME" \
   --memory "$RAM" \
   --vcpus "$VCPUS" \
+  --boot uefi \
   --disk size="$DISK_SIZE",format=qcow2,bus=virtio \
   --cdrom "$ISO_PATH" \
   --os-variant debian12 \
   --graphics none \
   --console pty,target_type=serial \
-  --extra-args 'console=ttyS0,115200n8 serial' \
   --network network=default,model=virtio \
   --noautoconsole
 

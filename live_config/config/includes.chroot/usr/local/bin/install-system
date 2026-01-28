@@ -1,0 +1,140 @@
+#!/bin/bash
+# install-system
+# Instalador Personalizado: Debian 13 "Trixie" com ZFS Boot Menu e Samba AD
+
+set -e
+
+# Configurações do Pool
+POOL_NAME="zroot"
+ZFS_OPTS="-o ashift=12 -O compression=lz4 -O acltype=posixacl -O xattr=sa -O dnodesize=auto -O normalization=formD -O mountpoint=none -O canmount=off -O devices=off"
+
+echo "=== Instalador Debian ZFS NAS (ZFSBootMenu Edition) ==="
+echo "ATENÇÃO: Este script apagará TODOS os dados do disco selecionado."
+echo ""
+echo "Discos disponíveis no sistema:"
+echo "--------------------------------------------------------------------------"
+printf "%-10s %-10s %-20s %-15s %-10s\n" "NOME" "TAMANHO" "MODELO" "SERIAL" "TIPO"
+echo "--------------------------------------------------------------------------"
+lsblk -dno NAME,SIZE,MODEL,SERIAL,TRAN | while read -r name size model serial tran; do
+    printf "/dev/%-5s %-10s %-20s %-15s %-10s\n" "$name" "$size" "${model:-N/D}" "${serial:-N/D}" "${tran:-N/D}"
+done
+echo "--------------------------------------------------------------------------"
+echo ""
+
+read -p "Digite o disco de destino (ex: /dev/sda): " TARGET_DISK
+
+if [ ! -b "$TARGET_DISK" ]; then
+    echo "Erro: Disco inválido."
+    exit 1
+fi
+
+echo "Iniciando particionamento em $TARGET_DISK..."
+
+# 1. Limpeza e Particionamento
+wipefs -a "$TARGET_DISK"
+sgdisk --zap-all "$TARGET_DISK"
+# Partição 1: ESP (EFI System Partition) - 512MB
+sgdisk -n 1:1M:+512M -t 1:EF00 "$TARGET_DISK"
+# Partição 2: ZFS Pool - Resto do disco
+sgdisk -n 2:0:0 -t 2:BF01 "$TARGET_DISK"
+
+partprobe "$TARGET_DISK"
+sleep 2
+
+# 2. Formatação e Criação do Pool
+mkfs.vfat -F 32 -n EFI "${TARGET_DISK}1"
+
+echo "Criando Pool ZFS ($POOL_NAME)..."
+zpool create -f $ZFS_OPTS -R /mnt "$POOL_NAME" "${TARGET_DISK}2"
+
+# 3. Criação dos Datasets (Hierarquia ZFSBootMenu)
+zfs create -o mountpoint=none "$POOL_NAME/ROOT"
+
+# Configurar propriedades específicas do ZBM
+zfs create -o mountpoint=/ \
+           -o canmount=noauto \
+           -o org.zfsbootmenu:commandline="quiet splash" \
+           "$POOL_NAME/ROOT/debian"
+
+zfs create -o mountpoint=/home "$POOL_NAME/home"
+zfs create -o mountpoint=/root "$POOL_NAME/home/root"
+
+# Configurar o pool para o ZBM encontrar o dataset de boot padrão
+zpool set bootfs="$POOL_NAME/ROOT/debian" "$POOL_NAME"
+
+# Exportar Pool e Reimportar para montar corretamente
+zpool export "$POOL_NAME"
+zpool import -R /mnt "$POOL_NAME"
+zfs mount "$POOL_NAME/ROOT/debian"
+zfs mount -a
+
+# Montar ESP
+mkdir -p /mnt/boot/efi
+mount "${TARGET_DISK}1" /mnt/boot/efi
+
+# 4. Instalação Offline (SquashFS Clone)
+echo "Instalando sistema base (Clonagem via SquashFS)..."
+
+LIVE_MEDIA="/run/live/medium"
+SQUASHFS="$LIVE_MEDIA/live/filesystem.squashfs"
+
+if [ ! -f "$SQUASHFS" ]; then
+    echo "ERRO: filesystem.squashfs não encontrado em $SQUASHFS"
+    exit 1
+fi
+
+echo "Descompactando imagem do sistema ($SQUASHFS)..."
+unsquashfs -f -d /mnt "$SQUASHFS"
+
+# 5. Configuração Pós-Clonagem
+echo "Configurando nova instância..."
+echo "nas-zfs" > /mnt/etc/hostname
+echo "127.0.0.1	localhost" > /mnt/etc/hosts
+echo "127.0.1.1	nas-zfs" >> /mnt/etc/hosts
+
+rm -f /mnt/etc/machine-id /mnt/var/lib/dbus/machine-id
+dbus-uuidgen --ensure=/mnt/etc/machine-id
+
+# Configuração de Rede (Systemd-networkd)
+cat <<EOF > /mnt/etc/systemd/network/20-wired.network
+[Match]
+Name=e*
+
+[Network]
+DHCP=yes
+EOF
+
+cat <<EOF > /mnt/etc/fstab
+# /etc/fstab: static file system information.
+proc /proc proc defaults 0 0
+UUID=$(blkid -s UUID -o value "${TARGET_DISK}1") /boot/efi vfat defaults 0 0
+EOF
+
+# 6. Instalação do ZFSBootMenu na partição EFI
+echo "Instalando binários do ZFSBootMenu na ESP..."
+mkdir -p /mnt/boot/efi/EFI/ZBM
+if [ -f "/usr/local/bin/zfsbootmenu.efi" ]; then
+    cp /usr/local/bin/zfsbootmenu.efi /mnt/boot/efi/EFI/ZBM/zfsbootmenu.efi
+else
+    echo "Aviso: Binário ZBM não encontrado localmente. Baixando..."
+    curl -L "https://get.zfsbootmenu.org/efi/master" -o /mnt/boot/efi/EFI/ZBM/zfsbootmenu.efi
+fi
+
+# Configurar como opção de boot padrão / Removable Path
+mkdir -p /mnt/boot/efi/EFI/BOOT
+cp /mnt/boot/efi/EFI/ZBM/zfsbootmenu.efi /mnt/boot/efi/EFI/BOOT/BOOTX64.EFI
+
+# 7. Finalização (Chroot)
+mount --bind /dev /mnt/dev
+mount --bind /proc /mnt/proc
+mount --bind /sys /mnt/sys
+
+echo "Entrando no chroot para atualizar initramfs..."
+chroot /mnt /bin/bash <<CHROOT_EOF
+# Garantir que o cache do pool esteja atualizado
+mkdir -p /etc/zfs
+zpool set cachefile=/etc/zfs/zpool.cache $POOL_NAME
+update-initramfs -u -k all
+CHROOT_EOF
+
+echo "=== Instalação Concluída! ==="
