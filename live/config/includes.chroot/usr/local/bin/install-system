@@ -1,5 +1,5 @@
 #!/bin/bash
-# install-zfs.sh
+# install-system
 # Instalador Personalizado: Debian 13 "Trixie" com ZFS Boot Menu e Samba AD
 # Data: 2026-01-28
 
