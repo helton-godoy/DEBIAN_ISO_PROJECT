@@ -1,14 +1,18 @@
-# Pacotes essenciais para o ambiente Live com suporte a ZFS
-# === Extração do Sistema ===
+# =============================================================================
+# AURORA NAS - Package List para Debian ZFS Live ISO
+# Objetivo: Paridade funcional com FreeNAS 9.10 / TrueNAS SCALE
+# =============================================================================
+
+# === Extração do Sistema =====================================================
 squashfs-tools
 
-# === Particionamento ===
+# === Particionamento & Boot ==================================================
 gdisk
 parted
 dosfstools
 efibootmgr
 
-# === Live System Base ===
+# === Live System Base ========================================================
 live-boot
 live-config
 live-config-systemd
@@ -18,17 +22,13 @@ shim-signed
 mokutil
 sbsigntool
 
-# === ZFS Support ===
-zfs-dkms
-zfsutils-linux
-zfs-initramfs
-zfs-zed
-
-# === Kernel & Modules ===
+# === Kernel & Módulos =========================================================
 linux-image-amd64
 linux-headers-amd64
 initramfs-tools
 dkms
+
+# === Firmware (CRÍTICO para Hardware Real) ===================================
 firmware-linux
 firmware-linux-nonfree
 firmware-misc-nonfree
@@ -36,67 +36,145 @@ firmware-realtek
 firmware-iwlwifi
 firmware-atheros
 firmware-libertas
+firmware-bnx2
+firmware-bnx2x
+firmware-qlogic
 
-# === Essential Tools ===
-bash-completion
-sudo
-console-setup
-keyboard-configuration
-tzdata
-locales
-kexec-tools
-ca-certificates
-network-manager
-iproute2
-openssl
-ssh
-curl
-wget
-rsync
-perl
-zstd
+# === ZFS Support Completo ====================================================
+zfs-dkms
+zfsutils-linux
+zfs-initramfs
+zfs-zed
+zfs-auto-snapshot
 
-# === Debian ===
-debootstrap
-dpkg-dev
-debian-archive-keyring
-apt-utils
+# === NFS v4 ACLs & Compatibilidade FreeNAS ===================================
+nfs4-acl-tools
+nfs-common
+acl
+attr
 
-# === Firmware (CRÍTICO para Hardware Real) ===
-firmware-linux
-firmware-linux-nonfree
-firmware-misc-nonfree
-firmware-realtek
-firmware-iwlwifi
-firmware-atheros
-
-# === Rede & Wi-Fi ===
-wpasupplicant
-iw
-wireless-tools
-
-# === Ferramentas Admin & Diag ===
-gum
-htop
-screen
-nano
-smartmontools
-lm-sensors
-pciutils
-usbutils
-lsof
-pigz
-
-# === Integração AD Moderna ===
+# === Samba NAS Corporativo ===================================================
 samba
+samba-common-bin
+samba-vfs-modules
+samba-dsdb-modules
 winbind
 libnss-winbind
 libpam-winbind
-nfs4-acl-tools
-acl
-attr
+libpam-smbpass
+cifs-utils
+
+# === Integração Active Directory (realmd/sssd + winbind) =====================
 realmd
 sssd
 sssd-tools
 adcli
 packagekit
+krb5-user
+krb5-config
+ldap-utils
+ldb-tools
+tdb-tools
+
+# === Infraestrutura Essencial (NTP, DNS, Rede) ===============================
+chrony
+dnsutils
+bind9-host
+ethtool
+irqbalance
+sysfsutils
+
+# === Network Manager & Wi-Fi =================================================
+network-manager
+wpasupplicant
+iw
+
+# === Diagnóstico de Rede & Performance =======================================
+tcpdump
+iperf3
+nload
+
+# === Ferramentas de Sistema & Administração ==================================
+bash-completion
+sudo
+tzdata
+locales
+kexec-tools
+ca-certificates
+openssl
+openssh-server
+openssh-client
+curl
+wget
+rsync
+perl
+zstd
+pigz
+ncdu
+tree
+pv
+
+# === Debian Tools ============================================================
+debootstrap
+dpkg-dev
+debian-archive-keyring
+apt-utils
+
+# === Hardware Monitoring & Diagnóstico =======================================
+smartmontools
+lm-sensors
+pciutils
+usbutils
+lsof
+hdparm
+sdparm
+nvme-cli
+
+# === Ferramentas de Recuperação & Debug ======================================
+gum
+htop
+screen
+nano
+vim-tiny
+console-setup
+keyboard-configuration
+strace
+ltrace
+
+# === Utilitários Adicionais ==================================================
+bc
+jq
+pv
+unzip
+xz-utils
+bzip2
+gzip
+tar
+less
+man-db
+uuid-runtime
+whois
+logrotate
+mlocate
+
+# === Sistema de Arquivos Adicionais (para compatibilidade) ===================
+e2fsprogs
+xfsprogs
+btrfs-progs
+ntfs-3g
+exfat-fuse
+exfatprogs
+hfsprogs
+jfsutils
+reiserfsprogs
+
+# === ISCSI Initiator (se necessário para storage externo) ====================
+open-iscsi
+
+# === SNMP (para monitoramento) ===============================================
+snmp
+snmpd
+libsnmp-base
+
+# === Postfix (null client para notificações por email) =======================
+# postfix (descomente se precisar de notificações por email)
