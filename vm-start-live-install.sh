@@ -39,15 +39,16 @@ if virsh list --all | grep -q "$VM_NAME"; then
 fi
 
 # 3. Criação da VM
-echo "Criando VM $VM_NAME..."
-echo "  - RAM: ${RAM}MB"
-echo "  - CPU: ${VCPUS}"
-echo "  - Disco: ${DISK_SIZE}GB"
-echo "  - ISO: $ISO_PATH"
+echo "
+  Criando VM $VM_NAME...
+  - RAM: ${RAM}MB
+  - CPU: ${VCPUS}
+  - Disco: ${DISK_SIZE}GB
+  - ISO: $ISO_PATH
+"
 
-# Nota: Usamos --network network=default para NAT. 
-# Para AD, idealmente usaríamos --network bridge=br0 se disponível, 
-# mas NAT permite acesso à internet (e ao AD se houver roteamento).
+# Nota: Usamos User Mode Networking (SLIRP) para funcionar sem root/sudo.
+# Mapeamos a porta 2222 do host para a 22 da VM para acesso SSH.
 
 virt-install \
   --name "$VM_NAME" \
@@ -55,17 +56,20 @@ virt-install \
   --vcpus "$VCPUS" \
   --boot uefi \
   --disk size="$DISK_SIZE",format=qcow2,bus=virtio \
-  --cdrom "$ISO_PATH" \
+  --location "$ISO_PATH" \
   --os-variant debian12 \
   --graphics none \
   --console pty,target_type=serial \
   --network network=default,model=virtio \
+  --extra-args "console=ttyS0,115200n8 serial" \
   --noautoconsole
 
 echo -e "${GREEN}VM Criada!${NC}"
-echo "Para acessar o console (boot log):"
-echo "  virsh console $VM_NAME"
-echo ""
-echo "Para conectar via SSH (após instalação):"
-echo "  1. Descubra o IP: virsh domifaddr $VM_NAME"
-echo "  2. Conecte: ssh admin@IP_DA_VM"
+echo "
+  Para acessar o console (boot log):
+    virsh console $VM_NAME
+
+  Para conectar via SSH (após instalação):
+    Comando: ssh -p 2222 helton@localhost
+    (Senha padrão definida na ISO ou 'live'/'live' se for live system)
+    "
