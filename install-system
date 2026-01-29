@@ -1,0 +1,614 @@
+#!/usr/bin/env bash
+#
+# Instalador AURORA TUI para Debian ZFS NAS
+# Design System v2.0 - Monochromatic Slate
+# Baseado no "install-system-mockup-7.sh"
+# Desenvolvido - 2026-01-29
+#
+
+set -e
+
+# ═══════════════════════════════════════════════════════════════════════════════
+# AURORA DESIGN SYSTEM v2.0 - PALETA MONOCROMÁTICA SLATE
+# ═══════════════════════════════════════════════════════════════════════════════
+
+# Flag de modo simulação
+MOCK_MODE=true
+
+# Fundos e superfícies
+DS_VOID=235      # Profundidade absoluta
+DS_DEPTH=237     # Superfície base
+DS_ELEVATION=239 # Cards/containers
+
+# Bordas (sutileza progressiva)
+DS_WHISPER=240 # Divisores discretos
+DS_MIST=243    # Bordas padrão
+
+# Textos (hierarquia de informação)
+DS_FOG=245    # Labels secundárias
+DS_HAZE=248   # Descrições
+DS_CLOUD=250  # Corpo de texto
+DS_SILVER=252 # Destaques
+
+# Acentos Slate (matiz principal)
+DS_SLATE_DIM=66    # Detalhes técnicos
+DS_SLATE=67        # Elementos interativos
+DS_SLATE_GLOW=68   # Hover/foco
+DS_AURORA_PEAK=153 # Estado ativo (único brilhante)
+
+# Funcionais (uso restrito <5%)
+DS_SUCCESS=108 # Sucesso
+DS_WARNING=179 # Aviso
+DS_ERROR=167   # Erro
+
+# Caracteres UI
+UI_H='─'
+UI_H_D='═'
+UI_ARROW='▶'
+UI_BULLET='●'
+UI_CHECK='✓'
+UI_WARN='⚠'
+
+# ═══════════════════════════════════════════════════════════════════════════════
+# CONFIGURAÇÕES DO POOL
+# ═══════════════════════════════════════════════════════════════════════════════
+
+POOL_NAME="zroot"
+ZFS_OPTS="-o ashift=12 -O compression=lz4 -O acltype=posixacl -O xattr=sa -O dnodesize=auto -O normalization=formD -O mountpoint=none -O canmount=off -O devices=off"
+
+# ═══════════════════════════════════════════════════════════════════════════════
+# COMPONENTES DE UI AURORA v2.0
+# ═══════════════════════════════════════════════════════════════════════════════
+
+# Hero header com bordas duplas e identidade premium
+hero_header() {
+	local title="${1:-AURORA INSTALLER}"
+	local subtitle="${2:-Debian ZFS NAS - High Performance Storage}"
+
+	clear
+	gum style \
+		--foreground $DS_AURORA_PEAK \
+		--border-foreground $DS_SLATE \
+		--border double \
+		--align center \
+		--width 60 \
+		--margin "1 2" \
+		--padding "1 2" \
+		"$title" "$subtitle"
+
+	# Indicador de modo simulação
+	if [[ "$MOCK_MODE" == true ]]; then
+		gum style \
+			--foreground $DS_WARNING \
+			--border-foreground $DS_WARNING \
+			--border normal \
+			--align center \
+			--width 60 \
+			--margin "0 2" \
+			--padding "0 1" \
+			"${UI_WARN} MODO SIMULAÇÃO - Nenhuma alteração real será feita"
+	fi
+}
+
+# Função para simular execução de comandos
+run_step_mock() {
+	local title="$1"
+	local duration="${2:-2}"
+
+	gum spin \
+		--spinner minidot \
+		--spinner.foreground $DS_SLATE \
+		--title "$title" \
+		--title.foreground $DS_HAZE \
+		-- sleep "$duration"
+}
+
+# Separador visual elegante
+separator() {
+	gum style --foreground $DS_MIST --bold \
+		"$(printf "${UI_H}%.0s" $(seq 1 60))"
+}
+
+# Header de seção com hierarquia clara
+section_header() {
+	local title="$1"
+	echo ""
+	separator
+	gum style --foreground $DS_SILVER --bold "  ${UI_ARROW} $title"
+	separator
+}
+
+# Subheader para agrupamentos
+subheader() {
+	local text="$1"
+	echo ""
+	gum style --foreground $DS_HAZE --italic "    ↳ $text"
+}
+
+# Card de informação com elevação sutil
+info_card() {
+	local title="$1"
+	shift
+
+	gum style \
+		--border-foreground $DS_WHISPER \
+		--border normal \
+		--padding "1 2" \
+		--margin "1 2" \
+		"$(gum style --foreground $DS_SLATE_GLOW --bold "$title")" \
+		"$(gum style --foreground $DS_MIST "$(printf "${UI_H}%.0s" $(seq 1 40))")" \
+		"$@"
+}
+
+# Item de lista formatado
+list_item() {
+	local label="$1"
+	local value="$2"
+	gum style --width 50 \
+		"$(gum style --foreground $DS_HAZE "  ${UI_BULLET} $label:") $(gum style --foreground $DS_SLATE_GLOW --bold "$value")"
+}
+
+# Progress bar monocromático sofisticado
+progress_bar() {
+	local current="$1"
+	local total="$2"
+	local label="${3:-Processando...}"
+
+	local width=40
+	local filled=$((current * width / total))
+	local empty=$((width - filled))
+	local pct=$((current * 100 / total))
+
+	local bar_filled=$(printf '█%.0s' $(seq 1 $filled))
+	local bar_empty=$(printf '░%.0s' $(seq 1 $empty))
+
+	echo ""
+	gum style --foreground $DS_SLATE \
+		"  [$bar_filled$bar_empty] ${pct}%"
+	gum style --foreground $DS_FOG --italic \
+		"      ${UI_ARROW} $label"
+}
+
+# Status badges
+status_ok() {
+	gum style --foreground $DS_SUCCESS "  ${UI_CHECK} $1"
+}
+
+status_info() {
+	gum style --foreground $DS_SLATE_DIM "  ${UI_BULLET} $1"
+}
+
+status_warn() {
+	gum style --foreground $DS_WARNING "  ${UI_WARN} $1"
+}
+
+# Caixa de erro premium
+error_box() {
+	echo ""
+	gum style \
+		--foreground $DS_ERROR \
+		--border-foreground $DS_ERROR \
+		--border double \
+		--padding "1 2" \
+		--margin "1 2" \
+		--align center \
+		"${UI_WARN} ERRO" \
+		"" \
+		"$1"
+}
+
+# Caixa de sucesso
+success_box() {
+	gum style \
+		--foreground $DS_SUCCESS \
+		--border-foreground $DS_SUCCESS \
+		--border double \
+		--padding "2 3" \
+		--margin "1 2" \
+		--align center \
+		"$@"
+}
+
+# Campo de input estilizado
+styled_input() {
+	local label="$1"
+	local placeholder="$2"
+	local value="${3:-}"
+	local result=""
+
+	echo ""
+	gum style --foreground $DS_CLOUD "$label:"
+
+	if [[ -n "$value" ]]; then
+		result=$(gum input \
+			--placeholder "$placeholder" \
+			--value "$value" \
+			--prompt.foreground $DS_SLATE \
+			--cursor.foreground $DS_AURORA_PEAK)
+	else
+		result=$(gum input \
+			--placeholder "$placeholder" \
+			--prompt.foreground $DS_SLATE \
+			--cursor.foreground $DS_AURORA_PEAK)
+	fi
+
+	echo "$result"
+}
+
+# Seleção de lista estilizada
+styled_select() {
+	local title="$1"
+	shift
+
+	echo ""
+	gum style --foreground $DS_CLOUD "$title"
+	echo ""
+
+	printf '%s\n' "$@" | gum choose \
+		--height 8 \
+		--cursor.foreground $DS_AURORA_PEAK \
+		--selected.foreground $DS_SILVER
+}
+
+# Confirmação estilizada
+styled_confirm() {
+	local prompt="$1"
+	local affirmative="${2:-Prosseguir}"
+	local negative="${3:-Cancelar}"
+
+	echo ""
+	gum confirm "$prompt" \
+		--default=false \
+		--affirmative "$affirmative" \
+		--negative "$negative" \
+		--prompt.foreground "$DS_CLOUD" \
+		--selected.background "$DS_SLATE"
+}
+
+# Spinner com estilo AURORA
+styled_spinner() {
+	local title="$1"
+	gum spin \
+		--spinner minidot \
+		--spinner.foreground $DS_SLATE \
+		--title "$title" \
+		--title.foreground $DS_HAZE \
+		-- sleep "${2:-2}"
+}
+
+# ═══════════════════════════════════════════════════════════════════════════════
+# FLUXO DE INSTALAÇÃO
+# ═══════════════════════════════════════════════════════════════════════════════
+
+# TELA 1: Boas-vindas e verificação
+show_welcome() {
+	hero_header "AURORA INSTALLER" "Debian ZFS NAS - High Performance Storage"
+
+	echo ""
+	gum style --foreground $DS_HAZE \
+		"  Bem-vindo ao instalador AURORA. Este assistente irá"
+	gum style --foreground $DS_HAZE \
+		"  guiá-lo através da instalação do Debian com ZFS on Root."
+
+	info_card "Requisitos do Sistema" \
+		"  ${UI_BULLET} Modo UEFI" \
+		"  ${UI_BULLET} Mínimo 4GB RAM" \
+		"  ${UI_BULLET} Disco de 20GB+"
+
+	styled_confirm "Iniciar instalação do sistema?" "Iniciar" "Sair" || exit 0
+}
+
+# TELA 2: Verificação de hardware (SIMULADO)
+check_hardware() {
+	hero_header
+	section_header "Verificação de Hardware"
+
+	status_info "Detectando ambiente de boot..."
+
+	# No modo mock, assumimos UEFI sempre disponível
+	# if [ ! -d /sys/firmware/efi ]; then
+	#     error_box "O sistema não iniciou via UEFI. O AURORA requer UEFI."
+	#     exit 1
+	# fi
+
+	styled_spinner "Validando ambiente" 1
+
+	status_ok "Ambiente UEFI detectado (simulado)"
+	status_ok "Controladoras de armazenamento ativas (simulado)"
+	status_ok "Módulos ZFS disponíveis (simulado)"
+
+	echo ""
+	styled_confirm "Prosseguir com a instalação?" "Continuar" "Voltar"
+}
+
+# TELA 3: Seleção de disco (SIMULADO)
+select_disk() {
+	hero_header
+	section_header "Seleção de Disco de Destino"
+
+	echo ""
+	gum style --foreground $DS_WARNING --align center \
+		"  ${UI_WARN} Atenção: Todos os dados no disco selecionado serão APAGADOS."
+	echo ""
+
+	# Discos mock para simulação
+	if [[ "$MOCK_MODE" == true ]]; then
+		DISK_LIST=$(
+			cat <<'EOF'
+sda (500GB) - Samsung SSD 870 EVO
+sdb (2TB) - Seagate IronWolf NAS
+nvme0n1 (1TB) - WD Black SN850X
+vda (64GB) - Virtual Disk
+EOF
+		)
+	else
+		DISK_LIST=$(lsblk -dno NAME,SIZE,MODEL | grep -v "loop" | awk '{print $1" ("$2") - "$3}')
+	fi
+
+	if [ -z "$DISK_LIST" ]; then
+		error_box "Nenhum disco encontrado disponível para instalação."
+		exit 1
+	fi
+
+	subheader "Discos detectados (simulação)"
+
+	TARGET_SELECTED=$(echo "$DISK_LIST" | gum choose \
+		--height 8 \
+		--cursor.foreground $DS_AURORA_PEAK \
+		--selected.foreground $DS_SILVER)
+
+	TARGET_DISK="/dev/$(echo "$TARGET_SELECTED" | awk '{print $1}')"
+
+	echo ""
+	status_ok "Disco selecionado: $TARGET_DISK (simulado)"
+}
+
+# TELA 4: Configuração de usuário
+configure_user() {
+	hero_header
+	section_header "Configuração de Conta de Usuário"
+
+	echo ""
+	status_info "Configure as credenciais de acesso administrativo"
+	echo ""
+
+	ADM_USER=$(styled_input "Nome de usuário administrador" "ex: admin" "helton")
+
+	section_header "Definição de Senha Segura"
+
+	gum style --foreground $DS_FOG --italic \
+		"  A senha definida será utilizada tanto para o usuário"
+	gum style --foreground $DS_FOG --italic \
+		"  administrador quanto para a conta root do sistema."
+	echo ""
+
+	while true; do
+		echo ""
+		gum style --foreground $DS_CLOUD "Digite a senha:"
+		ADM_PASS=$(gum input --password --placeholder "Senha forte" \
+			--prompt.foreground $DS_SLATE --cursor.foreground $DS_AURORA_PEAK)
+
+		echo ""
+		gum style --foreground $DS_CLOUD "Confirme a senha:"
+		CONFIRM_PASS=$(gum input --password --placeholder "Repita a senha" \
+			--prompt.foreground $DS_SLATE --cursor.foreground $DS_AURORA_PEAK)
+
+		if [ "$ADM_PASS" = "$CONFIRM_PASS" ] && [ -n "$ADM_PASS" ]; then
+			echo ""
+			status_ok "Senha definida com sucesso!"
+			break
+		fi
+
+		echo ""
+		gum style --foreground $DS_WARNING \
+			"  ${UI_WARN} As senhas não conferem ou estão vazias. Tente novamente."
+	done
+}
+
+# TELA 5: Configuração de rede
+configure_network() {
+	hero_header
+	section_header "Configuração de Rede"
+
+	echo ""
+	status_info "Defina o identificador do sistema na rede"
+	echo ""
+
+	HOSTNAME=$(styled_input "Hostname do sistema" "ex: nas-zfs" "aurora-nas")
+
+	echo ""
+	status_ok "Hostname configurado: $HOSTNAME"
+}
+
+# TELA 6: Resumo e confirmação
+show_summary() {
+	hero_header
+	section_header "Resumo da Instalação"
+
+	echo ""
+	gum style --foreground $DS_FOG --italic \
+		"  Revise as configurações antes de prosseguir:"
+	echo ""
+
+	info_card "Configurações Selecionadas" \
+		"$(list_item "Disco de destino" "$TARGET_DISK")" \
+		"$(list_item "Tamanho" "$(echo $TARGET_SELECTED | awk -F'[()]' '{print $2}')")" \
+		"$(list_item "Usuário admin" "$ADM_USER")" \
+		"$(list_item "Hostname" "$HOSTNAME")" \
+		"$(list_item "Filesystem" "ZFS on Root (ZBM)")" \
+		"$(list_item "Pool ZFS" "$POOL_NAME")"
+
+	echo ""
+	gum style --foreground $DS_WARNING --align center \
+		"  ${UI_WARN} ESTA OPERAÇÃO IRÁ APAGAR TODOS OS DADOS DO DISCO!"
+	echo ""
+
+	styled_confirm "Confirmar início da instalação?" "${UI_CHECK} PROSSEGUIR" "${UI_WARN} CANCELAR" || exit 1
+}
+
+# TELA 7: Instalação com progresso (MODO SIMULAÇÃO)
+run_installation() {
+	hero_header
+	section_header "Instalação em Andamento"
+
+	echo ""
+	gum style --foreground $DS_FOG --italic \
+		"  Por favor, aguarde enquanto configuramos o sistema..."
+	echo ""
+
+	local total_steps=8
+	local current_step=0
+
+	# Step 1: Preparação (SIMULADO)
+	((current_step++))
+	progress_bar $current_step $total_steps "Limpando disco $TARGET_DISK"
+	run_step_mock "Limpando disco $TARGET_DISK..." 2
+	status_ok "Disco preparado (simulado)"
+
+	# Step 2: Particionamento (SIMULADO)
+	((current_step++))
+	progress_bar $current_step $total_steps "Configurando partições EFI e ZFS"
+	run_step_mock "Configurando EFI (512MB)..." 2
+	status_ok "Partições criadas (simulado)"
+
+	# Step 3: Pool ZFS (SIMULADO)
+	((current_step++))
+	progress_bar $current_step $total_steps "Criando pool ZFS $POOL_NAME"
+	run_step_mock "Criando Pool ZFS ($POOL_NAME)..." 3
+	subheader "Opções: ashift=12, compression=lz4, acltype=posixacl"
+	status_ok "Pool ZFS criado (simulado)"
+
+	# Step 4: Datasets (SIMULADO)
+	((current_step++))
+	progress_bar $current_step $total_steps "Configurando datasets ZFS"
+	run_step_mock "Criando Datasets ZFS (ROOT/debian)..." 2
+	run_step_mock "Criando Datasets ZFS (/home, /root)..." 1
+	status_ok "Datasets configurados (simulado)"
+
+	# Step 5: Montagem (SIMULADO)
+	((current_step++))
+	progress_bar $current_step $total_steps "Montando hierarquia de arquivos"
+	run_step_mock "Montando hierarquia ZFS em /mnt..." 2
+	run_step_mock "Montando partição EFI..." 1
+	status_ok "Sistema de arquivos montado (simulado)"
+
+	# Step 6: Extração (SIMULADO)
+	((current_step++))
+	progress_bar $current_step $total_steps "Extraindo sistema base (pode demorar)"
+	run_step_mock "Extraindo arquivos do SquashFS (simulando 4.2GB)..." 5
+	subheader "Total: 65.432 arquivos extraídos (simulado)"
+	status_ok "Sistema base extraído (simulado)"
+
+	# Step 7: Configuração do sistema (SIMULADO)
+	((current_step++))
+	progress_bar $current_step $total_steps "Aplicando configurações do sistema"
+	run_step_mock "Configurando hostname ($HOSTNAME)..." 1
+	run_step_mock "Configurando rede (DHCP)..." 1
+	run_step_mock "Gerando machine-id único..." 1
+	run_step_mock "Criando usuário $ADM_USER..." 1
+	status_ok "Configurações aplicadas (simulado)"
+
+	# Step 8: Bootloader (SIMULADO)
+	((current_step++))
+	progress_bar $current_step $total_steps "Instalando ZFSBootMenu"
+	run_step_mock "Baixando ZFSBootMenu EFI..." 3
+	run_step_mock "Configurando entrada UEFI..." 2
+	run_step_mock "Atualizando initramfs..." 2
+	status_ok "Bootloader instalado (simulado)"
+
+	# Finalização (SIMULADO)
+	section_header "Finalizando Configurações"
+	run_step_mock "Aplicando configurações finais no chroot..." 3
+	status_ok "Sistema finalizado (simulado)"
+
+	# Aviso de simulação
+	echo ""
+	gum style \
+		--foreground $DS_WARNING \
+		--border-foreground $DS_WARNING \
+		--border normal \
+		--padding "1 2" \
+		--margin "1 2" \
+		--align center \
+		"${UI_WARN} MODO SIMULAÇÃO" \
+		"" \
+		"Nenhuma alteração real foi feita no sistema." \
+		"Esta foi apenas uma demonstração visual da interface."
+}
+
+# TELA 8: Conclusão
+show_completion() {
+	hero_header
+
+	echo ""
+	success_box \
+		"${UI_CHECK} INSTALAÇÃO SIMULADA CONCLUÍDA" \
+		"" \
+		"Interface AURORA testada com sucesso" \
+		"" \
+		"Hostname: $HOSTNAME" \
+		"Usuário: $ADM_USER" \
+		"Disco: $TARGET_DISK" \
+		"" \
+		"Esta foi uma demonstração visual do instalador."
+
+	echo ""
+	gum style --foreground $DS_FOG --italic \
+		"  ${UI_BULLET} Em uma instalação real, o sistema seria reiniciado agora."
+	echo ""
+
+	if styled_confirm "Encerrar demonstração?" "${UI_CHECK} Encerrar" "Voltar ao início"; then
+		gum style --foreground $DS_AURORA_PEAK "  Obrigado por testar o AURORA Installer!"
+		sleep 2
+		clear
+		exit 0
+	else
+		# Volta ao início
+		main
+	fi
+}
+
+# Função auxiliar para execução de steps (DESATIVADA NO MODO MOCK)
+run_step() {
+	local title="$1"
+	local cmd="$2"
+
+	if [[ "$MOCK_MODE" == true ]]; then
+		# Modo simulação - apenas mostra spinner
+		gum spin \
+			--spinner minidot \
+			--spinner.foreground $DS_SLATE \
+			--title "$title" \
+			--title.foreground $DS_HAZE \
+			-- sleep 2
+	else
+		# Modo real (não utilizado no mockup)
+		if ! gum spin \
+			--spinner minidot \
+			--spinner.foreground $DS_SLATE \
+			--title "$title" \
+			--title.foreground $DS_HAZE \
+			-- bash -c "$cmd"; then
+			error_box "Falha ao executar: $title"
+			exit 1
+		fi
+	fi
+}
+
+# ═══════════════════════════════════════════════════════════════════════════════
+# PONTO DE ENTRADA PRINCIPAL
+# ═══════════════════════════════════════════════════════════════════════════════
+
+main() {
+	show_welcome
+	check_hardware
+	select_disk
+	configure_user
+	configure_network
+	show_summary
+	run_installation
+	show_completion
+}
+
+# Executa o instalador
+main

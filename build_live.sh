@@ -1,4 +1,4 @@
-#!/bin/bash
+#!/usr/bin/env bash
 # build_live.sh
 # Constrói a ISO usando o conteúdo de live_config dentro de live_build
 
@@ -10,8 +10,8 @@ cd "$(dirname "$0")"
 
 # Verificar se live_config existe
 if [ ! -d "live_config" ]; then
-    echo "ERRO: Diretório 'live_config' não encontrado na raiz do projeto."
-    exit 1
+	echo "ERRO: Diretório 'live_config' não encontrado na raiz do projeto."
+	exit 1
 fi
 
 # 1. Preparar o ambiente de build
@@ -21,14 +21,14 @@ mkdir -p live_build
 
 # Limpeza segura: limpar conteúdo de live_build preservando cache/config/auto se existirem
 (
-    cd live_build || exit
-    # Remove tudo exceto cache, config, auto e o próprio diretório atual (.)
-    # Usa find para evitar problemas de parser com extglob e garantir que funcione
-    find . -mindepth 1 -maxdepth 1 \
-        ! -name 'cache' \
-        ! -name 'config' \
-        ! -name 'auto' \
-        -exec sudo rm -rf {} +
+	cd live_build || exit
+	# Remove tudo exceto cache, config, auto e o próprio diretório atual (.)
+	# Usa find para evitar problemas de parser com extglob e garantir que funcione
+	find . -mindepth 1 -maxdepth 1 \
+		! -name 'cache' \
+		! -name 'config' \
+		! -name 'auto' \
+		-exec sudo rm -rf {} +
 )
 
 # Sincroniza live_config para live_build
@@ -44,5 +44,5 @@ docker build -t debian-live-builder .
 # Nota: --privileged é necessário para o live-build (chroot/mount)
 echo "Iniciando build da ISO em live_build..."
 docker run --privileged --rm \
-    -v "$(pwd)/live_build:/project" \
-    debian-live-builder
+	-v "$(pwd)/live_build:/project" \
+	debian-live-builder
