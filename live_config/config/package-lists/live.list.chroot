@@ -1,28 +1,102 @@
 # Pacotes essenciais para o ambiente Live com suporte a ZFS
-zfsutils-linux
+# === Extração do Sistema ===
+squashfs-tools
+
+# === Particionamento ===
 gdisk
+parted
 dosfstools
-curl
-kpartx
-patch
-rsync
-uuid-runtime
-binutils
+efibootmgr
+
+# === Live System Base ===
 live-boot
 live-config
 live-config-systemd
-parted
 
-# ZFSBootMenu & System Install Utils
-kexec-tools
-efibootmgr
-cpio
-zstd
-perl
+# Secure Boot Support
+shim-signed
+mokutil
+sbsigntool
+
+# === ZFS Support ===
+zfs-dkms
+zfsutils-linux
+zfs-initramfs
+zfs-zed
+
+# === Kernel & Modules ===
+linux-image-amd64
+linux-headers-amd64
+initramfs-tools
+dkms
+firmware-linux
+firmware-linux-nonfree
+firmware-misc-nonfree
+firmware-realtek
+firmware-iwlwifi
+firmware-atheros
+firmware-libertas
+
+# === Essential Tools ===
 bash-completion
+sudo
+console-setup
+keyboard-configuration
+tzdata
+locales
+kexec-tools
+ca-certificates
+network-manager
+iproute2
+openssl
+ssh
+curl
+wget
+rsync
+perl
+zstd
+
+# === Debian ===
 debootstrap
 dpkg-dev
 debian-archive-keyring
-ca-certificates
-openssl
-wget
+apt-utils
+
+# === Firmware (CRÍTICO para Hardware Real) ===
+firmware-linux
+firmware-linux-nonfree
+firmware-misc-nonfree
+firmware-realtek
+firmware-iwlwifi
+firmware-atheros
+
+# === Rede & Wi-Fi ===
+wpasupplicant
+iw
+wireless-tools
+
+# === Ferramentas Admin & Diag ===
+gum
+htop
+screen
+nano
+smartmontools
+lm-sensors
+pciutils
+usbutils
+lsof
+pigz
+
+# === Integração AD Moderna ===
+samba
+winbind
+libnss-winbind
+libpam-winbind
+nfs4-acl-tools
+acl
+attr
+realmd
+sssd
+sssd-tools
+adcli
+packagekit

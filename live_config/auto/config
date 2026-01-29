@@ -5,7 +5,8 @@ lb config noauto \
     --mode debian \
     --distribution trixie \
     --architectures amd64 \
-    --archive-areas "main contrib non-free-firmware" \
+    --archive-areas "main contrib non-free non-free-firmware" \
+    --parent-archive-areas 'main contrib non-free-firmware non-free' \
     --linux-packages "linux-image linux-headers" \
     --mirror-binary "http://ftp.br.debian.org/debian/" \
     --mirror-chroot "http://ftp.br.debian.org/debian/" \
