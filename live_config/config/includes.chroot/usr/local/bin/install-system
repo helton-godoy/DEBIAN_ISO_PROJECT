@@ -508,15 +508,15 @@ run_installation() {
 	progress_bar $current_step $total_steps "Aplicando configurações do sistema"
 
 	# Hostname
-	echo "$HOSTNAME" > /mnt/etc/hostname
-	cat > /mnt/etc/hosts <<EOF
+	echo "$HOSTNAME" >/mnt/etc/hostname
+	cat >/mnt/etc/hosts <<EOF
 127.0.0.1	localhost
 127.0.1.1	$HOSTNAME
 EOF
 	run_step "Configurando hostname ($HOSTNAME)..." "true"
 
 	# Network
-	cat > /mnt/etc/systemd/network/20-wired.network <<EOF
+	cat >/mnt/etc/systemd/network/20-wired.network <<EOF
 [Match]
 Name=e*
 [Network]
@@ -531,12 +531,12 @@ EOF
 	# Fstab (apenas EFI no modo UEFI)
 	if [ "$BOOT_MODE" = "UEFI" ]; then
 		local EFI_UUID=$(blkid -s UUID -o value "${TARGET_DISK}1")
-		cat > /mnt/etc/fstab <<EOF
+		cat >/mnt/etc/fstab <<EOF
 proc /proc proc defaults 0 0
 UUID=$EFI_UUID /boot/efi vfat defaults 0 0
 EOF
 	else
-		cat > /mnt/etc/fstab <<EOF
+		cat >/mnt/etc/fstab <<EOF
 proc /proc proc defaults 0 0
 EOF
 	fi
