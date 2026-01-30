@@ -2,16 +2,16 @@
 # auto/config reconstruído
 
 lb config noauto \
-    --mode debian \
-    --distribution trixie \
-    --architectures amd64 \
-    --archive-areas "main contrib non-free non-free-firmware" \
-    --parent-archive-areas 'main contrib non-free-firmware non-free' \
-    --linux-packages "linux-image linux-headers" \
-    --mirror-binary "http://ftp.br.debian.org/debian/" \
-    --mirror-chroot "http://ftp.br.debian.org/debian/" \
-    --mirror-bootstrap "http://ftp.br.debian.org/debian/" \
-    --binary-images iso-hybrid \
-    --bootloader grub-efi \
-    --bootappend-live "boot=live components hostname=debian-zfs-nas username=admin autologin locales=pt_BR.UTF-8 keyboard-layouts=br timezone=America/Cuiaba console=ttyS0,115200n8" \
-    "${@}"
+	--mode debian \
+	--distribution trixie \
+	--architectures amd64 \
+	--archive-areas "main contrib non-free non-free-firmware" \
+	--parent-archive-areas 'main contrib non-free-firmware non-free' \
+	--linux-packages "linux-image linux-headers" \
+	--mirror-binary "http://ftp.br.debian.org/debian/" \
+	--mirror-chroot "http://ftp.br.debian.org/debian/" \
+	--mirror-bootstrap "http://ftp.br.debian.org/debian/" \
+	--binary-images iso-hybrid \
+	--bootloader grub-efi \
+	--bootappend-live "boot=live components hostname=debian-zfs-nas username=admin autologin locales=pt_BR.UTF-8 keyboard-layouts=br timezone=America/Cuiaba console=ttyS0,115200n8" \
+	"${@}"
