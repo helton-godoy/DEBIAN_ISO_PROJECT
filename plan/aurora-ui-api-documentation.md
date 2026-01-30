@@ -22,7 +22,7 @@ source ./aurora-ui-system.sh
 O sistema utiliza uma paleta monocromática baseada em tons de cinza/azul-acinzentado:
 
 | Constante        | Valor | Descrição                  |
-|------------------|-------|----------------------------|
+| ---------------- | ----- | -------------------------- |
 | `PRIMARY`        | 236   | Fundo principal (#303030)  |
 | `SECONDARY`      | 240   | Fundo secundário (#585858) |
 | `ACCENT`         | 244   | Acentos sutis (#808080)    |

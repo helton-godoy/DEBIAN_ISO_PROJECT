@@ -122,27 +122,27 @@ Todas as operações de sistema foram substituídas por simulações realistas:
 
 ## 🎨 Paleta de Cores
 
-| Uso | Cor ANSI | Descrição |
-|-----|----------|-----------|
-| Primária | 212 | Roxo claro (Aurora brand) |
-| Sucesso | 40 | Verde |
-| Erro | 196 | Vermelho |
-| Informação | 39 | Azul claro |
-| Aviso | 226 | Amarelo |
-| Header | 123 | Ciano claro |
-| Texto secundário | 244 | Cinza escuro |
+| Uso              | Cor ANSI | Descrição                 |
+| ---------------- | -------- | ------------------------- |
+| Primária         | 212      | Roxo claro (Aurora brand) |
+| Sucesso          | 40       | Verde                     |
+| Erro             | 196      | Vermelho                  |
+| Informação       | 39       | Azul claro                |
+| Aviso            | 226      | Amarelo                   |
+| Header           | 123      | Ciano claro               |
+| Texto secundário | 244      | Cinza escuro              |
 
 ## 📊 Comparação: Original vs Mockup Aprimorado
 
-| Aspecto | Original | Mockup Aprimorado |
-|---------|----------|-------------------|
-| Animações | ❌ | ✅ Spinners, barras de progresso |
-| Validação de entrada | Básica | Avançada com feedback |
-| Logs | ❌ | ✅ Painel de logs detalhado |
-| Caixas de mensagem | Simples | Aprimoradas com ícones |
-| Navegação | Linear | Com confirmações |
-| Segurança | Executa comandos reais | 100% simulado |
-| Experiência visual | Funcional | Premium e envolvente |
+| Aspecto              | Original               | Mockup Aprimorado                |
+| -------------------- | ---------------------- | -------------------------------- |
+| Animações            | ❌                     | ✅ Spinners, barras de progresso |
+| Validação de entrada | Básica                 | Avançada com feedback            |
+| Logs                 | ❌                     | ✅ Painel de logs detalhado      |
+| Caixas de mensagem   | Simples                | Aprimoradas com ícones           |
+| Navegação            | Linear                 | Com confirmações                 |
+| Segurança            | Executa comandos reais | 100% simulado                    |
+| Experiência visual   | Funcional              | Premium e envolvente             |
 
 ## 🔧 Como Usar
 

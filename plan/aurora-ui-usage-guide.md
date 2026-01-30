@@ -211,21 +211,21 @@ create_table() {
     local headers=("$@")
     local rows=()
     local col_width=20
-    
+
     # Cabeçalho
     local header_line=""
     for header in "${headers[@]}"; do
         header_line+=$(printf "%-${col_width}s" "$header")
     done
     echo -e "\033[1;38;5;${HIGHLIGHT}m${header_line}\033[0m"
-    
+
     # Separador
     local separator=""
     for header in "${headers[@]}"; do
         separator+=$(printf '%0.s' "-$(seq 1 $col_width)")
     done
     echo -e "\033[38;5;${BORDER}m${separator}\033[0m"
-    
+
     # Linhas
     for row in "${rows[@]}"; do
         local row_line=""
@@ -253,7 +253,7 @@ rows=(
 ```bash
 create_icon_list() {
     local items=("$@")
-    
+
     for item in "${items[@]}"; do
         local icon="${item%%:*}"
         local text="${item#*:}"
@@ -280,7 +280,7 @@ create_circular_progress() {
     local size=${2:-20}
     local filled=$((percentage * size / 100))
     local empty=$((size - filled))
-    
+
     # Círculo de progresso
     local circle=""
     for ((i=0; i<size; i++)); do
@@ -290,7 +290,7 @@ create_circular_progress() {
             circle+="○"
         fi
     done
-    
+
     echo -e "\033[38;5;${HIGHLIGHT}m${circle}\033[0m \033[38;5;${TEXT_PRIMARY}m${percentage}%\033[0m"
 }
 ```
@@ -359,12 +359,12 @@ validate_input() {
     local input=$1
     local pattern=$2
     local error_msg=$3
-    
+
     if [[ ! "$input" =~ $pattern ]]; then
         error_box "$error_msg"
         return 1
     fi
-    
+
     success_box "Entrada válida"
     return 0
 }
@@ -373,7 +373,7 @@ validate_input() {
 while true; do
     echo -e "\033[38;5;${TEXT_MUTED}mDigite um email:\033[0m"
     read email
-    
+
     if validate_input "$email" "^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$" "Email inválido"; then
         break
     fi
@@ -451,15 +451,15 @@ source ./aurora-ui-system.sh
 while true; do
     clear
     logo_static
-    
+
     # Informações do sistema
     echo ""
     render_text "Dashboard do Sistema" "h1" $HIGHLIGHT
     vspace 1
-    
+
     create_card "Informações" \
         "CPU: $(nproc) núcleos\nMemória: $(free -h | grep Mem | awk '{print $3}') / $(free -h | grep Mem | awk '{print $2}')\nDisco: $(df -h / | tail -1 | awk '{print $3}') / $(df -h / | tail -1 | awk '{print $2}')\nUptime: $(uptime -p)"
-    
+
     # Menu
     echo ""
     create_menu "Selecione uma opção" \
@@ -467,9 +467,9 @@ while true; do
         "Ver logs" \
         "Reiniciar serviço" \
         "Sair"
-    
+
     local choice=$?
-    
+
     case $choice in
         0)
             clear
@@ -520,7 +520,7 @@ echo ""
 while [ -z "$CONFIG_HOSTNAME" ]; do
     echo -e "\033[38;5;${TEXT_MUTED}mHostname:\033[0m"
     read CONFIG_HOSTNAME
-    
+
     if [ -z "$CONFIG_HOSTNAME" ]; then
         error_box "Hostname não pode estar vazio"
     fi
@@ -539,7 +539,7 @@ echo ""
 while [ -z "$CONFIG_USER" ]; do
     echo -e "\033[38;5;${TEXT_MUTED}mUsuário:\033[0m"
     read CONFIG_USER
-    
+
     if [ -z "$CONFIG_USER" ]; then
         error_box "Usuário não pode estar vazio"
     fi
@@ -558,7 +558,7 @@ echo ""
 while [ -z "$CONFIG_EMAIL" ]; do
     echo -e "\033[38;5;${TEXT_MUTED}mEmail:\033[0m"
     read CONFIG_EMAIL
-    
+
     if [ -z "$CONFIG_EMAIL" ]; then
         error_box "Email não pode estar vazio"
     fi
@@ -620,7 +620,7 @@ ANIMATIONS_ENABLED=false
 animate_loading() {
     local text=$1
     local duration=${2:-2}
-    
+
     if [ "$ANIMATIONS_ENABLED" = "true" ]; then
         # Animação completa
         ...
@@ -644,10 +644,10 @@ animate_loading() {
 check_terminal_size() {
     local min_width=80
     local min_height=24
-    
+
     local term_width=$(tput cols)
     local term_height=$(tput lines)
-    
+
     if [ $term_width -lt $min_width ] || [ $term_height -lt $min_height ]; then
         error_box "Terminal muito pequeno. Mínimo: ${min_width}x${min_height}"
         exit 1
@@ -668,7 +668,7 @@ check_terminal_size
 create_box_ascii() {
     local content=$1
     local width=${2:-60}
-    
+
     echo "+$(printf '%0.s' "-$(seq 1 $((width-2)))+"
     while IFS= read -r line; do
         echo "| ${line}$(printf ' %.0s' $(seq 1 $((width - ${#line} - 3)))|"
