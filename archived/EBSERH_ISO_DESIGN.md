@@ -38,18 +38,18 @@ Usaremos a ferramenta oficial do Debian para gerar a ISO. Isso garante que a bas
 
 Para atender ao requisito de **"Selecionar snapshot no boot"**, o GRUB é limitado. A solução moderna e robusta é o **ZFSBootMenu**.
 
-* **Estrutura de Boot:**
-  * Partição ESP (`vfat`): Contém o bootloader ZFSBootMenu (kernel Linux mínimo).
-  * Partição de Boot (`zfs` ou dentro do root): Contém kernels e initrd do Debian.
-  * **Funcionalidade:** O ZFSBootMenu carrega, monta o pool ZFS, permite escolher snapshots/clones (Boot Environments) e então passa o controle para o Debian.
+- **Estrutura de Boot:**
+  - Partição ESP (`vfat`): Contém o bootloader ZFSBootMenu (kernel Linux mínimo).
+  - Partição de Boot (`zfs` ou dentro do root): Contém kernels e initrd do Debian.
+  - **Funcionalidade:** O ZFSBootMenu carrega, monta o pool ZFS, permite escolher snapshots/clones (Boot Environments) e então passa o controle para o Debian.
 
 ### Otimizações Pré-injetadas
 
 O script de instalação já aplicará no `/target` (o novo sistema):
 
-* `zfs set compression=lz4`
-* `zfs set xattr=sa` (Vital para Samba)
-* **ACLs:** Ver disucssão abaixo.
+- `zfs set compression=lz4`
+- `zfs set xattr=sa` (Vital para Samba)
+- **ACLs:** Ver disucssão abaixo.
 
 ---
 
@@ -61,21 +61,21 @@ Esta é a parte crítica da sua solicitação.
 
 O FreeNAS usa ACLs NFSv4 nativas no ZFS (`acltype=nfsv4`).
 
-* **Vantagem:** Compatibilidade perfeita com ACLs do Windows (sem mapeamento).
-* **Desvantagem no Linux:** As ferramentas padrão (`ls`, `chmod`, `getfacl`) **não entendem** isso bem. Você precisa usar ferramentas específicas (`nfs4_getfacl`, `nfs4_setfacl`) que são "estranhas" para quem vem do Linux puro.
+- **Vantagem:** Compatibilidade perfeita com ACLs do Windows (sem mapeamento).
+- **Desvantagem no Linux:** As ferramentas padrão (`ls`, `chmod`, `getfacl`) **não entendem** isso bem. Você precisa usar ferramentas específicas (`nfs4_getfacl`, `nfs4_setfacl`) que são "estranhas" para quem vem do Linux puro.
 
 ### A Abordagem Debian/Linux Padrão (POSIX ACLs + Xattr)
 
 No Linux, o padrão de ouro para Samba é: `zfs set acltype=posixacl` e `zfs set xattr=sa`.
 
-* **Como funciona:** O Samba armazena as ACLs complexas do Windows dentro dos atributos estendidos (xattr). O sistema Linux vê permissões POSIX padrão e ACLs POSIX (`getfacl`).
-* **Vantagem:** Integração nativa com todas as ferramentas Linux (`mv`, `cp`, `tar` preservam tudo). É a forma mais estável e performática no Linux hoje.
+- **Como funciona:** O Samba armazena as ACLs complexas do Windows dentro dos atributos estendidos (xattr). O sistema Linux vê permissões POSIX padrão e ACLs POSIX (`getfacl`).
+- **Vantagem:** Integração nativa com todas as ferramentas Linux (`mv`, `cp`, `tar` preservam tudo). É a forma mais estável e performática no Linux hoje.
 
 ### Minha Recomendação: Caminho Híbrido
 
 Podemos configurar o ZFS com `acltype=posixacl` (para compatibilidade de sistema) **MAS** configurar o Samba (`vfs_acl_xattr` ou `vfs_zfsacl`) para gerenciar as permissões finas.
 
-Se você quer **exatamente** o comportamento de usar comandos para ver ACLs ricas, podemos incluir o pacote `nfs4-acl-tools` e configurar o ZFS com `acltype=nfsv4` no Linux. É possível, mas requer cuidado extra. *Na proposta abaixo, focarei na abordagem POSIX/Xattr que é a mais robusta para AD no Linux.*
+Se você quer **exatamente** o comportamento de usar comandos para ver ACLs ricas, podemos incluir o pacote `nfs4-acl-tools` e configurar o ZFS com `acltype=nfsv4` no Linux. É possível, mas requer cuidado extra. _Na proposta abaixo, focarei na abordagem POSIX/Xattr que é a mais robusta para AD no Linux._
 
 ---
 
@@ -87,19 +87,19 @@ Este script será embutido na ISO.
 
 2. **Criação do Pool:**
 
-    ```bash
-    zpool create -o ashift=12 -O mountpoint=none -O compression=lz4 -O acltype=posixacl -O xattr=sa rpool mirror /dev/sda2 /dev/sdb2
-    ```
+   ```bash
+   zpool create -o ashift=12 -O mountpoint=none -O compression=lz4 -O acltype=posixacl -O xattr=sa rpool mirror /dev/sda2 /dev/sdb2
+   ```
 
 3. **Datasets:**
-    * `rpool/ROOT/debian` (Mountpoint `/`)
-    * `rpool/arquivos`    (Dados)
+   - `rpool/ROOT/debian` (Mountpoint `/`)
+   - `rpool/arquivos` (Dados)
 4. **Debootstrap:** Instala o Debian Trixie básico em `/mnt`.
 
 5. **Chroot Configuration:**
-    * Instala kernel, zfs-dkms e grub.
-    * Gera `smb.conf` otimizado.
-    * Configura rede (NetworkManager ou systemd-networkd).
+   - Instala kernel, zfs-dkms e grub.
+   - Gera `smb.conf` otimizado.
+   - Configura rede (NetworkManager ou systemd-networkd).
 
 ## 6. Próximos Passos
 

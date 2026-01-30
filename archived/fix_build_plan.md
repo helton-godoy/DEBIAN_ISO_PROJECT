@@ -7,13 +7,13 @@ A execução do `./build_live.sh` falha devido a problemas estruturais na navega
 ### Problemas Identificados
 
 1. **Contexto e Caminhos no Script (`build_live.sh`)**:
-    - O script executa `cd live_build` e permanece lá.
-    - O comando `rsync` subsequente falha porque tenta acessar `live_config` (que está no pai) como se estivesse dentro de `live_build`.
-    - O comando `docker build` falha porque o contexto `.` agora é `live_build`, onde não existe o `Dockerfile` (que está na raiz).
-    - A montagem do volume `-v "$(pwd)/live_build:/project"` falha logicamente porque `$(pwd)` já é `.../live_build`, tentando montar um subdiretório inexistente.
+   - O script executa `cd live_build` e permanece lá.
+   - O comando `rsync` subsequente falha porque tenta acessar `live_config` (que está no pai) como se estivesse dentro de `live_build`.
+   - O comando `docker build` falha porque o contexto `.` agora é `live_build`, onde não existe o `Dockerfile` (que está na raiz).
+   - A montagem do volume `-v "$(pwd)/live_build:/project"` falha logicamente porque `$(pwd)` já é `.../live_build`, tentando montar um subdiretório inexistente.
 
 2. **Configuração de Locale no Dockerfile**:
-    - As variáveis de ambiente `ENV LC_ALL=pt_BR.UTF-8` são definidas antes da geração do locale (`locale-gen`), o que causa avisos durante a instalação de pacotes.
+   - As variáveis de ambiente `ENV LC_ALL=pt_BR.UTF-8` são definidas antes da geração do locale (`locale-gen`), o que causa avisos durante a instalação de pacotes.
 
 ## Solução Proposta
 
