@@ -49,19 +49,29 @@ nfs-common
 samba-common-bin
 samba-vfs-modules
 samba-dsdb-modules
-libpam-smbpass
+# libpam-smbpass - REMOVIDO: Descontinuado no Samba 4 (Debian Trixie+)
 cifs-utils
 ```
 
 **Justificativa:**
 
-| Pacote | Função | Necessidade |
-|--------|--------|-------------|
-| `samba-common-bin` | testparm, smbpasswd, net, pdbedit | Diagnóstico e administração |
-| `samba-vfs-modules` | vfs_acl_xattr, vfs_zfsacl, vfs_shadow_copy | **CRÍTICO** - Otimizações de performance e ACLs |
-| `samba-dsdb-modules` | Módulos de banco de dados Samba | Suporte a AD como membro |
-| `libpam-smbpass` | Sincronização senhas SMB/Linux | Opcional, mas útil |
-| `cifs-utils` | mount.cifs | Montar shares remotos para migração |
+**⚠️ Nota sobre libpam-smbpass:**
+Este pacote foi **removido** no Debian Trixie pois foi descontinuado upstream no Samba 4.
+A funcionalidade de sincronização de senhas SMB/Linux agora é tratada de forma diferente
+via `libpam-winbind` e configurações no `smb.conf`:
+```
+pam password change = yes
+passwd program = /usr/bin/passwd %u
+passwd chat = *Enter*new*password* %n\n *Retype*new*password* %n\n *password*updated*
+```
+
+| Pacote               | Função                                     | Necessidade                                     |
+| -------------------- | ------------------------------------------ | ----------------------------------------------- |
+| `samba-common-bin`   | testparm, smbpasswd, net, pdbedit          | Diagnóstico e administração                     |
+| `samba-vfs-modules`  | vfs_acl_xattr, vfs_zfsacl, vfs_shadow_copy | **CRÍTICO** - Otimizações de performance e ACLs |
+| `samba-dsdb-modules` | Módulos de banco de dados Samba            | Suporte a AD como membro                        |
+| `libpam-smbpass`     | Sincronização senhas SMB/Linux             | **REMOVIDO** - Descontinuado no Samba 4        |
+| `cifs-utils`         | mount.cifs                                 | Montar shares remotos para migração             |
 
 **Nota sobre VFS Modules:**
 O FreeNAS 9.10 usava extensivamente módulos VFS para:
@@ -84,13 +94,13 @@ tdb-tools
 
 **Justificativa:**
 
-| Pacote | Função | Crítico? |
-|--------|--------|----------|
-| `krb5-user` | kinit, klist, kdestroy, kpasswd | **SIM** - Autenticação Kerberos |
-| `krb5-config` | Configuração base do Kerberos | **SIM** |
-| `ldap-utils` | ldapsearch, ldapwhoami | Troubleshooting AD/DNS |
-| `ldb-tools` | ldbsearch, ldbmodify | Debug banco Samba |
-| `tdb-tools` | tdbdump, tdbbackup | Manipulação caches TDB |
+| Pacote        | Função                          | Crítico?                        |
+| ------------- | ------------------------------- | ------------------------------- |
+| `krb5-user`   | kinit, klist, kdestroy, kpasswd | **SIM** - Autenticação Kerberos |
+| `krb5-config` | Configuração base do Kerberos   | **SIM**                         |
+| `ldap-utils`  | ldapsearch, ldapwhoami          | Troubleshooting AD/DNS          |
+| `ldb-tools`   | ldbsearch, ldbmodify            | Debug banco Samba               |
+| `tdb-tools`   | tdbdump, tdbbackup              | Manipulação caches TDB          |
 
 **Observação:** Sem `krb5-user`, não é possível:
 
@@ -113,14 +123,14 @@ sysfsutils
 
 **Justificativa:**
 
-| Pacote | Função | Obrigatório? |
-|--------|--------|--------------|
-| `chrony` | Sincronização de tempo NTP | **SIM** - Kerberos requer sync <5min |
-| `dnsutils` | dig, nslookup | Troubleshooting DNS |
-| `bind9-host` | Comando host | Diagnóstico rápido |
-| `ethtool` | Configuração avançada NIC | Tuning de rede |
-| `irqbalance` | Distribuição interrupções | Performance multi-core |
-| `sysfsutils` | Persistent device naming | Estabilidade ZFS |
+| Pacote       | Função                     | Obrigatório?                         |
+| ------------ | -------------------------- | ------------------------------------ |
+| `chrony`     | Sincronização de tempo NTP | **SIM** - Kerberos requer sync <5min |
+| `dnsutils`   | dig, nslookup              | Troubleshooting DNS                  |
+| `bind9-host` | Comando host               | Diagnóstico rápido                   |
+| `ethtool`    | Configuração avançada NIC  | Tuning de rede                       |
+| `irqbalance` | Distribuição interrupções  | Performance multi-core               |
+| `sysfsutils` | Persistent device naming   | Estabilidade ZFS                     |
 
 **Por que chrony e não ntpd?**
 
@@ -164,6 +174,7 @@ jq
 - `ncdu` - Análise de uso de disco (mais intuitivo que du)
 - `pv` - Monitoramento de progresso (útil para rsync grandes)
 - `jq` - Processamento JSON (para scripts de automação)
+- `plocate` - Localização de arquivos (substitui `mlocate` no Debian Trixie)
 
 ---
 
@@ -276,18 +287,18 @@ wireless-tools    # Obsoleto, iw é suficiente
 
 ## 3. Matriz de Comparação com FreeNAS 9.10 / TrueNAS SCALE
 
-| Funcionalidade | FreeNAS 9.10 | TrueNAS SCALE | AURORA (pós mudanças) |
-|----------------|--------------|---------------|----------------------|
-| ZFS RAIDZ/Mirror | Sim | Sim | **Sim** (zfsutils-linux) |
-| ZFS Snapshots Auto | Sim | Sim | **Sim** (zfs-auto-snapshot) |
-| SMB com ACLs | Sim | Sim | **Sim** (samba-vfs-modules) |
-| Integração AD | Sim | Sim | **Sim** (krb5, winbind, realmd) |
-| NFS v4 ACLs | Sim | Sim | **Sim** (nfs4-acl-tools) |
-| NTP Sync | Sim | Sim | **Sim** (chrony) |
-| iSCSI | Sim (target) | Sim | **Sim** (open-iscsi initiator) |
-| SNMP | Sim | Sim | **Sim** (snmpd) |
-| Multi-filesystem | Sim | Sim | **Sim** (ext/xfs/ntfs/etc) |
-| SSH Server | Sim | Sim | **Sim** (openssh-server) |
+| Funcionalidade     | FreeNAS 9.10 | TrueNAS SCALE | AURORA (pós mudanças)           |
+| ------------------ | ------------ | ------------- | ------------------------------- |
+| ZFS RAIDZ/Mirror   | Sim          | Sim           | **Sim** (zfsutils-linux)        |
+| ZFS Snapshots Auto | Sim          | Sim           | **Sim** (zfs-auto-snapshot)     |
+| SMB com ACLs       | Sim          | Sim           | **Sim** (samba-vfs-modules)     |
+| Integração AD      | Sim          | Sim           | **Sim** (krb5, winbind, realmd) |
+| NFS v4 ACLs        | Sim          | Sim           | **Sim** (nfs4-acl-tools)        |
+| NTP Sync           | Sim          | Sim           | **Sim** (chrony)                |
+| iSCSI              | Sim (target) | Sim           | **Sim** (open-iscsi initiator)  |
+| SNMP               | Sim          | Sim           | **Sim** (snmpd)                 |
+| Multi-filesystem   | Sim          | Sim           | **Sim** (ext/xfs/ntfs/etc)      |
+| SSH Server         | Sim          | Sim           | **Sim** (openssh-server)        |
 
 ---
 
@@ -370,14 +381,14 @@ nvme --version
 
 ## 6. Tamanho Estimado da ISO
 
-| Componente | Tamanho Aproximado |
-|------------|-------------------|
-| Base Debian Trixie | ~800 MB |
-| Kernel + Firmware | ~400 MB |
-| ZFS Stack | ~200 MB |
-| Samba + AD Stack | ~150 MB |
-| Ferramentas adicionais | ~100 MB |
-| **Total Estimado** | **~1.6 GB** |
+| Componente             | Tamanho Aproximado |
+| ---------------------- | ------------------ |
+| Base Debian Trixie     | ~800 MB            |
+| Kernel + Firmware      | ~400 MB            |
+| ZFS Stack              | ~200 MB            |
+| Samba + AD Stack       | ~150 MB            |
+| Ferramentas adicionais | ~100 MB            |
+| **Total Estimado**     | **~1.6 GB**        |
 
 **Nota:** Tamanho compatível com DVDs e pendrives modernos.
 
@@ -393,4 +404,4 @@ nvme --version
 
 ---
 
-*Documento gerado para garantir paridade funcional com FreeNAS 9.10 e TrueNAS SCALE*
+_Documento gerado para garantir paridade funcional com FreeNAS 9.10 e TrueNAS SCALE_

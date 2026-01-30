@@ -75,32 +75,32 @@ Aqui portamos as otimizações de **AIO** e **Strict Sync** que forçamos no ban
    workgroup = AURORANET
    security = ads
    realm = AURORANET.AURORA.GOV.BR
-   
+
    # Otimizações de Performance (Portadas do FreeNAS)
    strict sync = no
    socket options = TCP_NODELAY IPTOS_LOWDELAY SO_RCVBUF=131072 SO_SNDBUF=131072
    aio read size = 16384
    aio write size = 16384
    use sendfile = yes
-   
+
    # Logs
    log file = /var/log/samba/log.%m
    log level = 1
-   
+
    # Identificação AD (Winbind)
    idmap config * : backend = tdb
    idmap config * : range = 3000-7999
-   
+
    # Mapeamento do Domínio Principal (RID é mais estável que AD para migrações)
    idmap config AURORANET : backend = rid
    idmap config AURORANET : range = 10000-999999
-   
+
    template shell = /bin/bash
    template homedir = /home/%U
    winbind enum users = no
    winbind enum groups = no
-   winbind refresh tickets = yes 
-   
+   winbind refresh tickets = yes
+
    # Compatibilidade com VFS do ZFS
    vfs objects = acl_xattr
    map acl inherit = yes
@@ -122,8 +122,8 @@ Para copiar os dados mantendo permissionamento e timestamps:
 rsync -avPHAX --delete root@IP_FREENAS:/mnt/tank/dados/ /tank/dados/
 ```
 
-* `-A`: Preserva ACLs.
-* `-X`: Preserva atributos estendidos.
+- `-A`: Preserva ACLs.
+- `-X`: Preserva atributos estendidos.
 
 ## Resumo das Vantagens no Debian
 

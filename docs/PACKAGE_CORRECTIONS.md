@@ -1,3 +1,50 @@
+# Correções Recomendadas para Lista de Pacotes AURORA
+
+**Arquivo Alvo:** [`live_config/config/package-lists/live.list.chroot`](live_config/config/package-lists/live.list.chroot:1)
+
+---
+
+## Resumo das Correções
+
+### 1. Remover Duplicado
+- **Linha 147:** Remover `pv` (já existe na linha 115)
+
+### 2. Adicionar Pacotes CRÍTICOS
+
+```
+# === RPC Support (CRÍTICO para NFS em Debian Trixie) =========================
+libtirpc3
+rpcbind
+```
+
+Local sugerido: Após a seção "ZFS Support Completo"
+
+### 3. Adicionar Pacotes RECOMENDADOS
+
+```
+# === Kerberos Keyring Persistence (RECOMENDADO para AD) ======================
+keyutils
+libnss-systemd
+
+# === Database Tools (RECOMENDADO para debug Samba) ===========================
+db-util
+
+# === Entropia para VMs (RECOMENDADO para Kerberos/TLS) =======================
+haveged
+
+# === Ferramentas Adicionais (RECOMENDADO) ====================================
+lsscsi
+netcat-openbsd
+debian-security-support
+```
+
+---
+
+## Arquivo Corrigido Completo
+
+Abaixo está a lista completa com todas as correções aplicadas:
+
+```
 # =============================================================================
 # AURORA NAS - Package List para Debian ZFS Live ISO
 # Objetivo: Paridade funcional com FreeNAS 9.10 / TrueNAS SCALE
@@ -48,8 +95,7 @@ zfs-zed
 zfs-auto-snapshot
 
 # === RPC Support (CRÍTICO para NFS em Debian Trixie) =========================
-# NOTA: libtirpc3t64 substitui libtirpc3 (transição 64-bit time_t no Trixie)
-libtirpc3t64
+libtirpc3
 rpcbind
 
 # === NFS v4 ACLs & Compatibilidade FreeNAS ===================================
@@ -81,7 +127,7 @@ ldap-utils
 ldb-tools
 tdb-tools
 
-# === Kerberos Keyring Persistence (ESSENCIAL para AD) ========================
+# === Kerberos Keyring Persistence (RECOMENDADO para AD) ======================
 keyutils
 libnss-systemd
 
@@ -198,3 +244,106 @@ debian-security-support
 
 # === Postfix (null client para notificações por email) =======================
 # postfix (descomente se precisar de notificações por email)
+```
+
+---
+
+## Diff das Alterações
+
+```diff
+--- a/live_config/config/package-lists/live.list.chroot
++++ b/live_config/config/package-lists/live.list.chroot
+@@ -46,6 +46,10 @@ zfsutils-linux
+ zfs-initramfs
+ zfs-zed
+ zfs-auto-snapshot
++
++# === RPC Support (CRÍTICO para NFS em Debian Trixie) =========================
++libtirpc3
++rpcbind
+ 
+ # === NFS v4 ACLs & Compatibilidade FreeNAS ===================================
+ nfs4-acl-tools
+@@ -75,6 +79,10 @@ ldap-utils
+ ldb-tools
+ tdb-tools
+ 
++# === Kerberos Keyring Persistence (RECOMENDADO para AD) ======================
++keyutils
++libnss-systemd
++
+ # === Infraestrutura Essencial (NTP, DNS, Rede) ===============================
+ chrony
+ dnsutils
+@@ -83,6 +91,10 @@ ethtool
+ irqbalance
+ sysfsutils
+ 
++# === Database Tools (RECOMENDADO para debug Samba) ===========================
++db-util
++
+ # === Network Manager & Wi-Fi =================================================
+ network-manager
+ wpasupplicant
+@@ -140,9 +152,8 @@ strace
+ ltrace
+ 
+ # === Utilitários Adicionais ==================================================
+ bc
+ jq
+-pv
+ unzip
+ xz-utils
+ bzip2
+@@ -156,6 +167,10 @@ logrotate
+ # NOTA: plocate substitui mlocate (Debian Trixie)
+ plocate
+ 
++# === Entropia para VMs (RECOMENDADO para Kerberos/TLS) =======================
++haveged
++
+ # === Sistema de Arquivos Adicionais (para compatibilidade) ===================
+ e2fsprogs
+ xfsprogs
+@@ -176,3 +191,8 @@ open-iscsi
+ snmp
+ snmpd
+ libsnmp-base
++
++# === Ferramentas Adicionais (RECOMENDADO) ====================================
++lsscsi
++netcat-openbsd
++debian-security-support
+```
+
+---
+
+## Notas de Implementação
+
+1. **Ordem dos Pacotes:** Mantenha a organização por seções para facilitar manutenção
+2. **Comentários:** Use comentários para documentar mudanças significativas
+3. **Dependências:** O APT resolverá automaticamente dependências adicionais
+4. **Tamanho:** As adições aumentam o tamanho da ISO em aproximadamente 5-10 MB
+
+---
+
+## Validação Após Aplicação
+
+Execute após rebuild da ISO:
+
+```bash
+# Verificar pacotes CRÍTICOS
+dpkg -l | grep -E "(libtirpc3|keyutils|rpcbind)"
+
+# Verificar pacotes RECOMENDADOS
+dpkg -l | grep -E "(libnss-systemd|db-util|haveged|lsscsi|netcat-openbsd|debian-security-support)"
+
+# Testar funcionalidades
+rpcinfo -p localhost        # Deve mostrar serviços RPC
+keyctl list @s              # Deve mostrar keyring
+haveged --version           # Deve mostrar versão
+```
+
+---
+
+*Arquivo gerado como parte da Revisão Técnica de Pacotes AURORA NAS*

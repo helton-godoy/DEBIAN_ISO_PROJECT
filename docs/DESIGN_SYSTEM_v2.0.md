@@ -2,7 +2,7 @@
 
 ## Sistema Visual Monocromático para Instalador TTY
 
-> **Filosofia**: *"Elegância através da restrição"* — Um sistema visual coeso que usa variações sutis de um único matiz para criar hierarquia, profundidade e sofisticação em ambiente terminal puro.
+> **Filosofia**: _"Elegância através da restrição"_ — Um sistema visual coeso que usa variações sutis de um único matiz para criar hierarquia, profundidade e sofisticação em ambiente terminal puro.
 
 ---
 
@@ -11,7 +11,7 @@
 ### Por que Slate Blue (Azul-Acizentado)?
 
 | Aspecto                | Benefício para NAS Installer                  |
-|------------------------|-----------------------------------------------|
+| ---------------------- | --------------------------------------------- |
 | **Associação Técnica** | Servidores, infraestrutura, profissionalismo  |
 | **Neutralidade**       | Não compete com status colors (success/error) |
 | **Legibilidade**       | Excelente contraste em fundos escuros TTY     |
@@ -35,7 +35,7 @@
 
 # Fundos (do mais escuro ao mais claro)
 DS_VOID=235           # ████ Profundidade absoluta (bg)
-DS_DEPTH=237          # ████ Superfície base  
+DS_DEPTH=237          # ████ Superfície base
 DS_ELEVATION=239      # ████ Cards/containers
 
 # Bordas (sutileza progressiva)
@@ -56,7 +56,7 @@ DS_AURORA_PEAK=153    # ◆◆◆◆ Estado ativo (único brilhante)
 
 # Funcionais (uso <5% da interface)
 DS_SUCCESS=108        # ✓ Apenas ícones de sucesso
-DS_WARNING=179        # ⚠ Apenas bordas de aviso  
+DS_WARNING=179        # ⚠ Apenas bordas de aviso
 DS_ERROR=167          # ❌ Apenas caixas de erro
 ```
 
@@ -80,7 +80,7 @@ VOID    DEPTH   ELEV    WHISPER MIST    FOG     HAZE    CLOUD   SILVER  PEAK
 ### Hierarquia Visual
 
 | Nível       | Representação      | Uso                | Cor             |
-|-------------|--------------------|--------------------|-----------------|
+| ----------- | ------------------ | ------------------ | --------------- |
 | **HERO**    | `▓▓▓ AURORA ▓▓▓`   | Logo/Splash        | AURORA_PEAK     |
 | **H1**      | `════ TÍTULO ════` | Headers de tela    | SILVER + border |
 | **H2**      | `──▶ Seção`        | Divisores de etapa | SILVER          |
@@ -93,10 +93,10 @@ VOID    DEPTH   ELEV    WHISPER MIST    FOG     HAZE    CLOUD   SILVER  PEAK
 ```bash
 # HERO (Tela de boas-vindas)
 ═══════════════════════════════════════════════════════════
-                                                          
+
                 ▓▓▓ E B S E R H ▓▓▓
         Debian ZFS NAS - High Performance Storage
-                                                          
+
 ═══════════════════════════════════════════════════════════
 
 # H1 (Header de etapa)
@@ -109,7 +109,7 @@ VOID    DEPTH   ELEV    WHISPER MIST    FOG     HAZE    CLOUD   SILVER  PEAK
 
 # BODY (Conteúdo)
   Selecione o disco onde o sistema será instalado.
-  
+
 # CAPTION (Metadados)
   Mínimo 20GB recomendado para instalação completa.
 ```
@@ -246,10 +246,10 @@ progress_bar() {
     local filled=$((current * width / total))
     local empty=$((width - filled))
     local pct=$((current * 100 / total))
-    
+
     local bar_filled=$(printf '█%.0s' $(seq 1 $filled))
     local bar_empty=$(printf '░%.0s' $(seq 1 $empty))
-    
+
     gum style --foreground $DS_SLATE \
         "  [$bar_filled$bar_empty] $pct%"
     gum style --foreground $DS_FOG --italic \
@@ -269,16 +269,16 @@ progress_bar() {
 ```bash
 form_field() {
     local label="$1" placeholder="$2" hint="$3"
-    
+
     gum style --foreground $DS_CLOUD "$label:"
     local value=$(gum input \
         --placeholder "$placeholder" \
         --prompt.foreground $DS_SLATE \
         --cursor.foreground $DS_AURORA_PEAK)
-    
+
     [[ -n "$hint" ]] && \
         gum style --foreground $DS_FOG --italic "    $hint"
-    
+
     echo "$value"
 }
 ```
@@ -322,7 +322,7 @@ Selecione o disco de destino:
 ### Variações de Estado
 
 | Estado       | Visual       | Implementação                                        |
-|--------------|--------------|------------------------------------------------------|
+| ------------ | ------------ | ---------------------------------------------------- |
 | **Default**  | `Elemento`   | `foreground $DS_SLATE`                               |
 | **Hover**    | `Elemento`   | `foreground $DS_SILVER` + `background $DS_ELEVATION` |
 | **Focus**    | `▶ Elemento` | prefix `▶` + `foreground $DS_AURORA_PEAK`            |
@@ -347,27 +347,27 @@ Selecione o disco de destino:
 
 ```
 ═══════════════════════════════════════════════════════════
-                                                          
+
               ░░░░░░░░░░░░░░░░░░░░░░░░░░░░░
               ░░░▓▓▓ A U R O R A ▓▓▓░░░░░░░
               ░░░░░░░░░░░░░░░░░░░░░░░░░░░░░
-                                                          
+
          Debian ZFS NAS - High Performance Storage
-                                                          
+
 ═══════════════════════════════════════════════════════════
-                                                          
+
   Bem-vindo ao instalador AURORA. Este assistente irá
   guiá-lo através da instalação do Debian com ZFS on Root.
-                                                          
+
   ┌─────────────────────────────────────────────────────┐
   │  Requisitos do sistema:                             │
   │  • Modo UEFI                                        │
   │  • Mínimo 4GB RAM                                   │
   │  • Disco de 20GB+                                   │
   └─────────────────────────────────────────────────────┘
-                                                          
+
               [  Iniciar Instalação  ]
-                                                          
+
          v2.0.0 • github.com/aurora-installer
 ```
 
@@ -375,26 +375,26 @@ Selecione o disco de destino:
 
 ```
 ═══════════════════════════════════════════════════════════
-                                                          
+
               INSTALAÇÃO EM ANDAMENTO
-                                                          
+
 ═══════════════════════════════════════════════════════════
-                                                          
+
   Progresso Geral
   [████████████████████░░░░░░░░░░░░░░░░░░] 45%
-                                                          
+
   ── Etapa Atual ─────────────────────────────────────────
-                                                          
+
   [✓] Preparando disco                    (concluído)
   [✓] Criando partições                   (concluído)
   [✓] Configurando pool ZFS               (concluído)
   [●] Extraindo sistema base              (em andamento)
   [░] Configurando bootloader             (pendente)
   [░] Finalizando instalação              (pendente)
-                                                          
+
   └─> Arquivo 4,234 de 45,892...
       Tempo estimado: ~3 minutos restantes
-                                                          
+
               [  Cancelar Instalação  ]
 ```
 
@@ -402,13 +402,13 @@ Selecione o disco de destino:
 
 ```
 ═══════════════════════════════════════════════════════════
-                                                          
+
                     ✓ CONCLUÍDO
-                                                          
+
          A instalação foi finalizada com sucesso!
-                                                          
+
 ═══════════════════════════════════════════════════════════
-                                                          
+
   ┌─────────────────────────────────────────────────────┐
   │  Resumo da Instalação                               │
   │  ─────────────────────────────────────────────────  │
@@ -422,9 +422,9 @@ Selecione o disco de destino:
   │  Hostname:       aurora-nas                         │
   │                                                     │
   └─────────────────────────────────────────────────────┘
-                                                          
+
     ⚠ Remova a mídia de instalação antes de reiniciar.
-                                                          
+
        [  Reiniciar Agora  ]  [  Linha de Comando  ]
 ```
 
@@ -448,7 +448,7 @@ export DS_VOID=235
 export DS_DEPTH=237
 export DS_ELEVATION=239
 
-# Bordas  
+# Bordas
 export DS_WHISPER=240
 export DS_MIST=243
 
@@ -528,10 +528,10 @@ aurora_progress() {
     local filled=$((current * width / total))
     local empty=$((width - filled))
     local pct=$((current * 100 / total))
-    
+
     local bar_filled=$(printf '█%.0s' $(seq 1 $filled))
     local bar_empty=$(printf '░%.0s' $(seq 1 $empty))
-    
+
     gum style --foreground $DS_SLATE \
         "  [$bar_filled$bar_empty] $pct%"
     gum style --foreground $DS_FOG --italic \
@@ -650,7 +650,7 @@ gum confirm "Reiniciar agora?" \
 ## 🎓 Princípios Aplicados
 
 | Princípio        | Implementação no AURORA DS                  |
-|------------------|---------------------------------------------|
+| ---------------- | ------------------------------------------- |
 | **Lei de Hick**  | Máximo 3 opções por decisão, fluxo linear   |
 | **Proximidade**  | Labels acima de inputs, cards agrupam info  |
 | **Contraste**    | Taxa mínima 7:1 entre textos e fundos       |

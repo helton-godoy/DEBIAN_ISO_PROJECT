@@ -42,7 +42,7 @@ Na função [`run_installation()`](install-system:450), substituir as chamadas [
 ### 4.1. Passos 1-7 (Comuns a Ambos os Modos)
 
 | Passo            | Comando Real Necessário (adaptado do script antigo)                                                                   |
-|------------------|-----------------------------------------------------------------------------------------------------------------------|
+| ---------------- | --------------------------------------------------------------------------------------------------------------------- |
 | 1 - Limpar disco | `wipefs -a $TARGET_DISK && sgdisk --zap-all $TARGET_DISK`                                                             |
 | 3 - Pool ZFS     | `sgdisk -n 2:0:0 -t 2:BF01 $TARGET_DISK && partprobe && zpool create -f $ZFS_OPTS -R /mnt $POOL_NAME ${TARGET_DISK}2` |
 | 4 - Datasets     | `zfs create` para ROOT/debian, home, home/root                                                                        |
@@ -66,7 +66,7 @@ fi
 ```
 
 | Modo | Partição 1 | Tipo | Comando sgdisk            | Formatação        |
-|------|------------|------|---------------------------|-------------------|
+| ---- | ---------- | ---- | ------------------------- | ----------------- |
 | UEFI | EFI System | EF00 | `-n 1:1M:+512M -t 1:EF00` | `mkfs.vfat -F 32` |
 | BIOS | BIOS Boot  | EF02 | `-n 1:0:+1M -t 1:EF02`    | Não formatada     |
 
@@ -102,14 +102,14 @@ else
     # Opção 1: Usar syslinux/extlinux para ZFS
     extlinux --install /mnt/boot/syslinux
     dd if=/usr/lib/syslinux/mbr.bin of=$TARGET_DISK bs=440 count=1
-    
+
     # Ou Opção 2: Usar GRUB legacy
     # grub-install --target=i386-pc $TARGET_DISK
 fi
 ```
 
 | Modo | Bootloader      | Localização/Target               | Comando Principal                      |
-|------|-----------------|----------------------------------|----------------------------------------|
+| ---- | --------------- | -------------------------------- | -------------------------------------- |
 | UEFI | ZFSBootMenu EFI | `/boot/efi/EFI/ZBM/`             | `efibootmgr --create`                  |
 | BIOS | Syslinux/GRUB   | MBR do disco + `/boot/syslinux/` | `extlinux --install` + `dd if=mbr.bin` |
 
@@ -147,7 +147,7 @@ fi
 ### 6.2. Tabela Comparativa: BIOS vs UEFI
 
 | Aspecto                 | UEFI                           | BIOS/Legacy                  |
-|-------------------------|--------------------------------|------------------------------|
+| ----------------------- | ------------------------------ | ---------------------------- |
 | **Detecção**            | `[ -d /sys/firmware/efi ]`     | Ausência do diretório acima  |
 | **Partição 1**          | EFI System (EF00) - 512MB      | BIOS Boot (EF02) - 1MB       |
 | **Formatação P1**       | VFAT (mkfs.vfat -F 32)         | Não formatada (raw)          |

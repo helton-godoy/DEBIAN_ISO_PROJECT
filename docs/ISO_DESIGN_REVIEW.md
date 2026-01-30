@@ -19,7 +19,7 @@ Esta revisão analisa o documento [`docs/AURORA_ISO_DESIGN.md`](docs/AURORA_ISO_
 ### 2.1 Tuning de Kernel Ausente
 
 | Aspecto                                     | Status           | Impacto |
-|---------------------------------------------|------------------|---------|
+| ------------------------------------------- | ---------------- | ------- |
 | [`/etc/sysctl.conf`](docs/AURORA_NAS.md:22) | NÃO IMPLEMENTADO | Alto    |
 
 O [`install-system`](live_config/config/includes.chroot/usr/local/bin/install-system:170) atual termina sem aplicar as otimizações de kernel definidas no NAS.md:
@@ -42,7 +42,7 @@ fs.inotify.max_user_watches=524288
 ### 2.2 Configuração Samba Inexistente
 
 | Aspecto                             | Status     | Impacto |
-|-------------------------------------|------------|---------|
+| ----------------------------------- | ---------- | ------- |
 | [`smb.conf`](docs/AURORA_NAS.md:74) | NÃO GERADO | CRÍTICO |
 
 O install-system instala pacotes Samba (linha 92-95 do package-list) mas **não gera configuração**. O objetivo de "replicar funcionalidades do FreeNAS" inclui o compartilhamento SMB que é core do sistema.
@@ -61,7 +61,7 @@ O install-system instala pacotes Samba (linha 92-95 do package-list) mas **não 
 ### 2.3 Integração Active Directory Incompleta
 
 | Aspecto                               | Status              | Impacto |
-|---------------------------------------|---------------------|---------|
+| ------------------------------------- | ------------------- | ------- |
 | [`realm join`](docs/AURORA_NAS.md:60) | NÃO IMPLEMENTADO    | CRÍTICO |
 | `/etc/krb5.conf`                      | NÃO CONFIGURADO     | Alto    |
 | NTP/Time Sync                         | NÃO CONFIGURADO     | Alto    |
@@ -80,7 +80,7 @@ O install-system configura rede via DHCP ([systemd-networkd](live_config/config/
 ### 2.4 Suporte a RAID/Multi-Disco Ausente
 
 | Aspecto      | Status           | Impacto |
-|--------------|------------------|---------|
+| ------------ | ---------------- | ------- |
 | Mirror/RAIDZ | NÃO IMPLEMENTADO | Médio   |
 
 O [`install-system`](live_config/config/includes.chroot/usr/local/bin/install-system:56) permite selecionar apenas **um disco**. O FreeNAS 9.10 tipicamente operava com RAID (mirror mínimo).
@@ -372,7 +372,7 @@ O projeto tem potencial para superar o FreeNAS 9.10 em:
 ### A. Referências Cruzadas
 
 | Requisito NAS.md | Status no ISO Design | Status no install-system |
-|------------------|----------------------|--------------------------|
+| ---------------- | -------------------- | ------------------------ |
 | ZFS + lz4        | Documentado          | Implementado             |
 | xattr=sa         | Documentado          | Implementado             |
 | Samba AD         | Documentado          | **Ausente**              |
@@ -403,4 +403,4 @@ smbclient -L localhost -U usuario
 
 ---
 
-*Documento gerado durante revisão arquitetural - 2026-01-29*
+_Documento gerado durante revisão arquitetural - 2026-01-29_
