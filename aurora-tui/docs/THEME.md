@@ -71,7 +71,7 @@ var (
 ### Hierarquia
 
 | Nível       | Representação      | Uso                | Cor             |
-|-------------|--------------------|--------------------|-----------------|
+| ----------- | ------------------ | ------------------ | --------------- |
 | **HERO**    | `▓▓▓ AURORA ▓▓▓`   | Logo/Splash        | Peak            |
 | **H1**      | `════ TÍTULO ════` | Headers de tela    | Silver + border |
 | **H2**      | `──▶ Seção`        | Divisores de etapa | Silver          |
@@ -121,12 +121,12 @@ func HeroHeader(title, subtitle string) string {
 **Resultado:**
 
 ```
-╔════════════════════════════════════════════════════════╗
-║                                                        ║
-║            AURORA NAS ADMIN                            ║
-║       High Performance Storage Management             ║
-║                                                        ║
-╚════════════════════════════════════════════════════════╝
+╔══════════════════════════════════════════════════════════╗
+║                                                          ║
+║                   AURORA NAS ADMIN                       ║
+║           High Performance Storage Management            ║
+║                                                          ║
+╚══════════════════════════════════════════════════════════╝
 ```
 
 ### 2. Section Header
@@ -134,7 +134,7 @@ func HeroHeader(title, subtitle string) string {
 ```go
 func SectionHeader(title string) string {
     line := strings.Repeat(string(HLine), 60)
-    
+
     return lipgloss.JoinVertical(
         lipgloss.Left,
         lipgloss.NewStyle().Foreground(Mist).Bold(true).Render(line),
@@ -159,11 +159,11 @@ func InfoCard(title string, lines ...string) string {
     titleStyle := lipgloss.NewStyle().
         Foreground(SlateGlow).
         Bold(true)
-    
+
     separator := lipgloss.NewStyle().
         Foreground(Mist).
         Render(strings.Repeat(string(HLine), 40))
-    
+
     content := lipgloss.JoinVertical(
         lipgloss.Left,
         titleStyle.Render(title),
@@ -171,7 +171,7 @@ func InfoCard(title string, lines ...string) string {
         "",
         lipgloss.JoinVertical(lipgloss.Left, lines...),
     )
-    
+
     return lipgloss.NewStyle().
         BorderStyle(lipgloss.NormalBorder()).
         BorderForeground(Whisper).
@@ -203,20 +203,20 @@ func ProgressBar(current, total int, label string) string {
     filled := current * width / total
     empty := width - filled
     pct := current * 100 / total
-    
+
     bar := lipgloss.NewStyle().Foreground(Slate).Render(
         "[" + strings.Repeat("█", filled) + strings.Repeat("░", empty) + "]",
     )
-    
+
     percentage := lipgloss.NewStyle().Foreground(Silver).Bold(true).Render(
         fmt.Sprintf(" %d%%", pct),
     )
-    
+
     labelStyle := lipgloss.NewStyle().
         Foreground(Fog).
         Italic(true).
         Render("      " + string(Arrow) + " " + label)
-    
+
     return lipgloss.JoinVertical(
         lipgloss.Left,
         bar+percentage,
@@ -266,12 +266,12 @@ func StatusError(text string) string {
 func Modal(title, message string, isError bool) string {
     borderColor := Slate
     titleColor := Peak
-    
+
     if isError {
         borderColor = Error
         titleColor = Error
     }
-    
+
     return lipgloss.NewStyle().
         BorderStyle(lipgloss.DoubleBorder()).
         BorderForeground(borderColor).
@@ -292,14 +292,14 @@ func Modal(title, message string, isError bool) string {
 
 ### Variações de Estado
 
-| Estado       | Visual       | Implementação                                      |
-|--------------|--------------|----------------------------------------------------|
-| **Default**  | `Elemento`   | `Foreground(Slate)`                               |
-| **Hover**    | `Elemento`   | `Foreground(Silver) + Background(Elevation)`      |
-| **Focus**    | `▶ Elemento` | Prefix `▶` + `Foreground(Peak)`                   |
-| **Active**   | `● Elemento` | Prefix `●` + `Foreground(Peak) + Bold(true)`      |
-| **Disabled** | `~ Elemento` | Prefix `~` + `Foreground(Fog)`                    |
-| **Selected** | `[✓] Item`   | `Foreground(Success)`                             |
+| Estado       | Visual       | Implementação                                |
+| ------------ | ------------ | -------------------------------------------- |
+| **Default**  | `Elemento`   | `Foreground(Slate)`                          |
+| **Hover**    | `Elemento`   | `Foreground(Silver) + Background(Elevation)` |
+| **Focus**    | `▶ Elemento` | Prefix `▶` + `Foreground(Peak)`              |
+| **Active**   | `● Elemento` | Prefix `●` + `Foreground(Peak) + Bold(true)` |
+| **Disabled** | `~ Elemento` | Prefix `~` + `Foreground(Fog)`               |
+| **Selected** | `[✓] Item`   | `Foreground(Success)`                        |
 
 ## Layouts
 
@@ -307,28 +307,31 @@ func Modal(title, message string, isError bool) string {
 
 ```
 ┌─────────────────────────────────────────────────────────────────┐
-│  AURORA NAS ADMIN                    [ZFS: OK] [SMB: OK]       │
+│  AURORA NAS ADMIN                          [ZFS: OK] [SMB: OK]  │
 ├─────────────────────────────────────────────────────────────────┤
 │                                                                 │
-│  ┌──────────────┐ ┌──────────────┐ ┌──────────────┐            │
-│  │     CPU      │ │   Memória    │ │  ZFS ARC     │            │
-│  │  ████████░░  │ │  ██████░░░░  │ │  ████░░░░░░  │            │
-│  │     82%      │ │     56%      │ │     32%      │            │
-│  └──────────────┘ └──────────────┘ └──────────────┘            │
+│  ┌─────────────────┐ ┌──────────────────┐ ┌──────────────────┐  │
+│  │       CPU       │ │     Memória      │ │    ZFS ARC       │  │
+│  │  ███████████░░  │ │  ████████░░░░░░  │ │  ██████░░░░░░░░  │  │
+│  │       82%       │ │       56%        │ │       32%        │  │
+│  └─────────────────┘ └──────────────────┘ └──────────────────┘  │
 │                                                                 │
-│  ┌─────────────────────────────────────────────────────────┐   │
-│  │  Pools ZFS                                               │   │
-│  │  ─────────────────────────────────────────────────────   │   │
-│  │  ● tank      [████████████████████] 78%  7.8TB/10TB     │   │
-│  │  ● backup    [████░░░░░░░░░░░░░░░░] 12%  1.2TB/10TB     │   │
-│  │  ● archive   [████████░░░░░░░░░░░░] 45%  4.5TB/10TB     │   │
-│  └─────────────────────────────────────────────────────────┘   │
+│  ┌───────────────────────────────────────────────────────────┐  │
+│  │  Pools ZFS                                                │  │
+│  │  ───────────────────────────────────────────────────────  │  │
+│  │  ● tank      [██████████████████████] 78%  7.8TB/10TB     │  │
+│  │  ● backup    [████░░░░░░░░░░░░░░░░░░] 12%  1.2TB/10TB     │  │
+│  │  ● archive   [████████░░░░░░░░░░░░░░] 45%  4.5TB/10TB     │  │
+│  └───────────────────────────────────────────────────────────┘  │
 │                                                                 │
-│  [F1 Ajuda]  [F2 Dashboard]  [F3 Pools]  [F4 Shares]  [Q Sair] │
+│  [F1 Ajuda]  [F2 Dashboard]  [F3 Pools]  [F4 Shares]  [Q Sair]  │
 └─────────────────────────────────────────────────────────────────┘
 ```
 
 ### Form Layout
+
+Campos de entrada precisam utilizar coloração levemente alterada, para deixar claro que aquele é um campo de entrada de texto.
+Não encontrei uma maneira melhor para representar a cor diferenciada para o campo de texto, mas a ideia é que o backgroud seja levemente mais claro que o restante da interface.
 
 ```
 ┌─────────────────────────────────────────────────────────────────┐
@@ -336,29 +339,29 @@ func Modal(title, message string, isError bool) string {
 ├─────────────────────────────────────────────────────────────────┤
 │                                                                 │
 │  ─────────────────────────────────────────────────────────────  │
-│    ▶ NOVO COMPARTILHAMENTO                                      │
+│    ▶ NOVO COMPARTILHAMENTO                                     │
 │  ─────────────────────────────────────────────────────────────  │
 │                                                                 │
 │  Nome do compartilhamento:                                      │
-│  [dados                         ]                               │
+│  [dados░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░]  │
 │  ↳ Apenas letras minúsculas, sem espaços                        │
 │                                                                 │
-│  Caminho:                                                       │
-│  [/tank/dados                  ]  [Browse]                      │
-│                                                                 │
 │  Descrição:                                                     │
-│  [Compartilhamento de dados da equipe]                          │
+│  [Compartilhamento░de░dados░da░equipe░░░░░░░░░░░░░░░░░░░░░░░░]  │
+│                                                                 │
+│  Caminho:                                                       │
+│  [/tank/dados░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░]  [Browse]  │
 │                                                                 │
 │  [✓] Permitir acesso anônimo                                    │
 │  [ ] Somente leitura                                            │
 │                                                                 │
-│  ┌─────────────────────────────────────────────────────────┐   │
-│  │  ⚠ Atenção                                              │   │
-│  │  Este compartilhamento será criado com as permissões    │   │
-│  │  padrão. Você pode ajustar as ACLs após a criação.      │   │
-│  └─────────────────────────────────────────────────────────┘   │
+│  ┌───────────────────────────────────────────────────────────┐  │
+│  │  ⚠ Atenção                                                │  │
+│  │  Este compartilhamento será criado com as permissões      │  │
+│  │  padrão. Você pode ajustar as ACLs após a criação.        │  │
+│  └───────────────────────────────────────────────────────────┘  │
 │                                                                 │
-│           [  Cancelar  ]      [  Criar  ]                       │
+│                                [  Cancelar  ]      [  Criar  ]  │
 │                                                                 │
 └─────────────────────────────────────────────────────────────────┘
 ```
@@ -419,12 +422,12 @@ func GetSize(width int) TerminalSize {
 
 ### Adaptações por Tamanho
 
-| Elemento     | XS (<80)    | SM (80-100) | MD (100-120) | LG (>120)  |
-|--------------|-------------|-------------|--------------|------------|
-| Sidebar      | Colapsada   | Ícones      | Ícones+Texto | Full       |
-| Tables       | 2 cols      | 3 cols      | 4 cols       | 5+ cols    |
-| Cards        | Stacked     | 2 cols      | 3 cols       | 4 cols     |
-| Info Detail  | Oculto      | Tooltip     | Lateral      | Lateral    |
+| Elemento    | XS (<80)  | SM (80-100) | MD (100-120) | LG (>120) |
+| ----------- | --------- | ----------- | ------------ | --------- |
+| Sidebar     | Colapsada | Ícones      | Ícones+Texto | Full      |
+| Tables      | 2 cols    | 3 cols      | 4 cols       | 5+ cols   |
+| Cards       | Stacked   | 2 cols      | 3 cols       | 4 cols    |
+| Info Detail | Oculto    | Tooltip     | Lateral      | Lateral   |
 
 ## Acessibilidade
 

@@ -16,23 +16,23 @@ gantt
     Design System            :a3, after a2, 4d
     Dashboard                :a4, after a3, 3d
     ZFS Plugin Básico        :a5, after a4, 5d
-    
+
     section Fase 2 - ZFS Completo
     Datasets                 :b1, after a5, 3d
     Snapshots                :b2, after b1, 4d
     Replicação               :b3, after b2, 3d
-    
+
     section Fase 3 - Samba
     Shares API               :c1, after b3, 3d
     ACLs                     :c2, after c1, 4d
-    
+
     section Fase 4 - AD
     Integração AD            :d1, after c2, 4d
-    
+
     section Fase 5 - Monitor
     Monitor Plugin           :e1, after d1, 3d
     Logs                     :e2, after e1, 2d
-    
+
     section Fase 6 - Polish
     Testes                   :f1, after e2, 3d
     Documentação             :f2, after f1, 2d
@@ -45,13 +45,16 @@ gantt
 ### Semana 1-2: Fundação
 
 #### 1.1 Estrutura Base do Projeto
+
 **Arquivos:**
+
 - `go.mod` - Dependências
 - `Makefile` - Build, test, lint
 - `.golangci.yml` - Configuração do linter
 - `.gitignore`
 
 **Dependências:**
+
 ```go
 require (
     github.com/charmbracelet/bubbletea v0.25.0
@@ -70,6 +73,7 @@ require (
 #### 1.2 Core Engine
 
 ##### 1.2.1 App (`internal/core/app.go`)
+
 ```go
 type App struct {
     config   *ConfigManager
@@ -87,6 +91,7 @@ func (a *App) Shutdown() error
 ```
 
 ##### 1.2.2 Router (`internal/core/router.go`)
+
 ```go
 type Router struct {
     routes       map[string]Route
@@ -103,6 +108,7 @@ func (r *Router) View() string
 ```
 
 ##### 1.2.3 ConfigManager (`internal/core/config.go`)
+
 ```go
 type ConfigManager struct {
     db     *sql.DB
@@ -118,6 +124,7 @@ func (c *ConfigManager) Close() error
 ```
 
 **Schema SQLite:**
+
 ```sql
 CREATE TABLE config (
     key TEXT PRIMARY KEY,
@@ -144,6 +151,7 @@ CREATE TABLE audit_log (
 ```
 
 ##### 1.2.4 CommandExecutor (`internal/core/executor.go`)
+
 ```go
 type CommandExecutor struct {
     dryRun      bool
@@ -157,6 +165,7 @@ func (e *CommandExecutor) SetDryRun(enabled bool)
 ```
 
 ##### 1.2.5 AuditLogger (`internal/core/audit.go`)
+
 ```go
 type AuditLogger struct {
     db     *sql.DB
@@ -172,6 +181,7 @@ func (a *AuditLogger) Query(filter AuditFilter) ([]AuditEntry, error)
 #### 1.3 Design System
 
 ##### 1.3.1 Tema (`internal/ui/theme.go`)
+
 ```go
 package ui
 
@@ -205,6 +215,7 @@ var Theme = struct {
 ##### 1.3.2 Componentes Base
 
 **Header (`internal/ui/components/header.go`):**
+
 ```go
 type Header struct {
     Title    string
@@ -215,6 +226,7 @@ func (h Header) Render() string
 ```
 
 **List (`internal/ui/components/list.go`):**
+
 ```go
 type List struct {
     Items      []ListItem
@@ -228,6 +240,7 @@ func (l *List) View() string
 ```
 
 **Table (`internal/ui/components/table.go`):**
+
 ```go
 type Table struct {
     Columns    []Column
@@ -245,6 +258,7 @@ type Column struct {
 ```
 
 **Form (`internal/ui/components/form.go`):**
+
 ```go
 type Form struct {
     Fields     []Field
@@ -266,6 +280,7 @@ type Field struct {
 ##### 1.3.3 Componentes de Feedback
 
 **Modal (`internal/ui/components/modal.go`):**
+
 ```go
 type Modal struct {
     Title     string
@@ -278,6 +293,7 @@ type Modal struct {
 ```
 
 **Progress (`internal/ui/components/progress.go`):**
+
 ```go
 type Progress struct {
     Current   int
@@ -290,6 +306,7 @@ func (p Progress) Render() string
 ```
 
 **Spinner (`internal/ui/components/spinner.go`):**
+
 ```go
 type Spinner struct {
     spinner.Model
@@ -302,6 +319,7 @@ type Spinner struct {
 #### 1.4 Dashboard
 
 ##### 1.4.1 View Principal (`internal/ui/views/dashboard.go`)
+
 ```go
 type DashboardView struct {
     width      int
@@ -320,21 +338,23 @@ func (d *DashboardView) View() string
 ```
 
 **Layout:**
+
 ```
-┌─────────────────────────────────────────────────────────────────┐
-│  HEADER                                                         │
-├─────────────────────────────────────────────────────────────────┤
-│  ┌────────┐ ┌────────┐ ┌────────┐                              │
-│  │  CPU   │ │  MEM   │ │  ARC   │                              │
-│  └────────┘ └────────┘ └────────┘                              │
-│  ┌─────────────────────────────────────────────────────────┐   │
-│  │  POOLS                                                  │   │
-│  └─────────────────────────────────────────────────────────┘   │
-│  ┌─────────────────────┐ ┌─────────────────────────────────┐   │
-│  │  SERVIÇOS           │ │  MENU                           │   │
-│  └─────────────────────┘ └─────────────────────────────────┘   │
-│  [F1 Ajuda] [F2 Dash] [F3 Pools] [F4 Shares] [Q Sair]          │
-└─────────────────────────────────────────────────────────────────┘
+┌─────────────────────────────────────────────────────────────────────┐
+│  HEADER                                                             │
+├─────────────────────────────────────────────────────────────────────┤
+│  ┌───────────────────┐ ┌───────────────────┐ ┌───────────────────┐  │
+│  │        CPU        │ │        MEM        │ │        ARC        │  │
+│  └───────────────────┘ └───────────────────┘ └───────────────────┘  │
+│  ┌───────────────────────────────────────────────────────────────┐  │
+│  │  POOLS                                                        │  │
+│  └───────────────────────────────────────────────────────────────┘  │
+│  ┌───────────────────┐ ┌─────────────────────────────────────────┐  │
+│  │  SERVIÇOS         │ │  MENU                                   │  │
+│  └───────────────────┘ └─────────────────────────────────────────┘  │
+│                                                                     │
+│               [F1 Ajuda] [F2 Dash] [F3 Pools] [F4 Shares] [Q Sair]  │
+└─────────────────────────────────────────────────────────────────────┘
 ```
 
 ---
@@ -342,6 +362,7 @@ func (d *DashboardView) View() string
 #### 1.5 ZFS Plugin (Básico)
 
 ##### 1.5.1 API (`internal/plugins/zfs/api.go`)
+
 ```go
 type ZFSAPI struct {
     executor *core.CommandExecutor
@@ -357,6 +378,7 @@ func (z *ZFSAPI) ListDatasets(pool string) ([]Dataset, error)
 ##### 1.5.2 Views
 
 **PoolsView (`internal/plugins/zfs/pools_view.go`):**
+
 ```go
 type PoolsView struct {
     table    *components.Table
@@ -370,6 +392,7 @@ func (p *PoolsView) View() string
 ```
 
 **PoolDetailView (`internal/plugins/zfs/pool_detail_view.go`):**
+
 ```go
 type PoolDetailView struct {
     poolName string
@@ -379,6 +402,7 @@ type PoolDetailView struct {
 ```
 
 **CreatePoolWizard (`internal/plugins/zfs/create_pool_wizard.go`):**
+
 ```go
 type CreatePoolWizard struct {
     step      int
@@ -410,6 +434,7 @@ func (z *ZFSAPI) GetProperty(dataset, property string) (string, error)
 ```
 
 **Views:**
+
 - DatasetsView
 - DatasetDetailView
 - CreateDatasetWizard
@@ -427,6 +452,7 @@ func (z *ZFSAPI) ReceiveSnapshot(dataset string, r io.Reader) error
 ```
 
 **Views:**
+
 - SnapshotsView
 - CreateSnapshotDialog
 - RollbackConfirmDialog
@@ -500,17 +526,20 @@ func (m *MonitorAPI) SubscribeAlerts(handler AlertHandler) Subscription
 ## Fase 6: Polish (Estimado: 5 dias)
 
 ### 6.1 Testes
+
 - Unit tests (>80% coverage)
 - Integration tests
 - Mock para ZFS/AD
 
 ### 6.2 Documentação
+
 - User guide
 - Admin guide
 - API reference
 - Troubleshooting
 
 ### 6.3 Otimizações
+
 - Cache de métricas
 - Batching de comandos
 - Redução de renderizações
@@ -520,6 +549,7 @@ func (m *MonitorAPI) SubscribeAlerts(handler AlertHandler) Subscription
 ## Checklist de Qualidade
 
 ### Código
+
 - [ ] Linting com golangci-lint
 - [ ] Formatação gofmt
 - [ ] Testes unitários
@@ -527,6 +557,7 @@ func (m *MonitorAPI) SubscribeAlerts(handler AlertHandler) Subscription
 - [ ] Documentação de funções públicas
 
 ### UI/UX
+
 - [ ] Navegação por teclado completa
 - [ ] Contraste adequado (WCAG)
 - [ ] Mensagens de erro claras
@@ -534,11 +565,13 @@ func (m *MonitorAPI) SubscribeAlerts(handler AlertHandler) Subscription
 - [ ] Confirmações para ações destrutivas
 
 ### Performance
+
 - [ ] Operações assíncronas
 - [ ] Cache quando apropriado
 - [ ] Otimização para SSH
 
 ### Segurança
+
 - [ ] Auditoria de operações
 - [ ] Validação de inputs
 - [ ] Sanitização de comandos
@@ -549,6 +582,7 @@ func (m *MonitorAPI) SubscribeAlerts(handler AlertHandler) Subscription
 ## Convenções de Código
 
 ### Estrutura de Arquivos
+
 ```
 internal/
   package/
@@ -559,6 +593,7 @@ internal/
 ```
 
 ### Nomenclatura
+
 - Tipos exportados: `PascalCase`
 - Funções exportadas: `PascalCase`
 - Variáveis/funções privadas: `camelCase`
@@ -566,6 +601,7 @@ internal/
 - Interfaces: terminam em `-er` (ex: `Reader`, `Writer`)
 
 ### Padrões
+
 - Retorne erros como último valor
 - Use `context.Context` para operações de longa duração
 - Prefira composição a herança
@@ -575,21 +611,21 @@ internal/
 
 ## Entregáveis por Fase
 
-| Fase | Entregável | Critério de Aceitação |
-|------|------------|----------------------|
-| 1.1 | Projeto base | Compila sem erros, tests passam |
-| 1.2 | Core Engine | Plugins podem ser registrados e inicializados |
-| 1.3 | Design System | Todos os componentes renderizam corretamente |
-| 1.4 | Dashboard | Mostra métricas em tempo real |
-| 1.5 | ZFS Básico | Listar pools, criar pool via wizard |
-| 2.1 | Datasets | CRUD completo de datasets |
-| 2.2 | Snapshots | Criar, listar, rollback de snapshots |
-| 2.3 | Replicação | Send/receive funcional |
-| 3.1 | Shares | CRUD completo de compartilhamentos SMB |
-| 3.2 | ACLs | Gerenciamento de permissões |
-| 4.1 | AD | Join/leave domain funcional |
-| 5.1 | Monitor | Dashboard de recursos e logs |
-| 6.1 | Release | Documentação completa, testes >80% |
+| Fase | Entregável    | Critério de Aceitação                         |
+| ---- | ------------- | --------------------------------------------- |
+| 1.1  | Projeto base  | Compila sem erros, tests passam               |
+| 1.2  | Core Engine   | Plugins podem ser registrados e inicializados |
+| 1.3  | Design System | Todos os componentes renderizam corretamente  |
+| 1.4  | Dashboard     | Mostra métricas em tempo real                 |
+| 1.5  | ZFS Básico    | Listar pools, criar pool via wizard           |
+| 2.1  | Datasets      | CRUD completo de datasets                     |
+| 2.2  | Snapshots     | Criar, listar, rollback de snapshots          |
+| 2.3  | Replicação    | Send/receive funcional                        |
+| 3.1  | Shares        | CRUD completo de compartilhamentos SMB        |
+| 3.2  | ACLs          | Gerenciamento de permissões                   |
+| 4.1  | AD            | Join/leave domain funcional                   |
+| 5.1  | Monitor       | Dashboard de recursos e logs                  |
+| 6.1  | Release       | Documentação completa, testes >80%            |
 
 ---
 
