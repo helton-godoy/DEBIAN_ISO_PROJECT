@@ -23,286 +23,286 @@ INSTALLATION_LOG=()
 
 # Simula verificação de hardware
 mock_check_hardware() {
-    add_log "Iniciando verificação de hardware..."
-    animate_loading "Detectando sistema UEFI..." 2
-    add_log "✓ UEFI detectado com sucesso"
-    sleep 0.5
+	add_log "Iniciando verificação de hardware..."
+	animate_loading "Detectando sistema UEFI..." 2
+	add_log "✓ UEFI detectado com sucesso"
+	sleep 0.5
 
-    echo -e "\033[38;5;${SUCCESS}m [✓] Ambiente UEFI detectado.\033[0m"
-    sleep 0.5
+	echo -e "\033[38;5;${SUCCESS}m [✓] Ambiente UEFI detectado.\033[0m"
+	sleep 0.5
 
-    # Simula verificação de memória
-    animate_loading "Verificando memória disponível..." 1
-    add_log "✓ Memória: 16GB disponível"
-    echo -e "\033[38;5;${SUCCESS}m [✓] Memória: 16GB disponível\033[0m"
-    sleep 0.5
+	# Simula verificação de memória
+	animate_loading "Verificando memória disponível..." 1
+	add_log "✓ Memória: 16GB disponível"
+	echo -e "\033[38;5;${SUCCESS}m [✓] Memória: 16GB disponível\033[0m"
+	sleep 0.5
 
-    # Simula verificação de CPU
-    animate_loading "Verificando processador..." 1
-    add_log "✓ CPU: 8 núcleos detectados"
-    echo -e "\033[38;5;${SUCCESS}m [✓] CPU: 8 núcleos detectados\033[0m"
+	# Simula verificação de CPU
+	animate_loading "Verificando processador..." 1
+	add_log "✓ CPU: 8 núcleos detectados"
+	echo -e "\033[38;5;${SUCCESS}m [✓] CPU: 8 núcleos detectados\033[0m"
 }
 
 # Simula listagem de discos
 mock_list_disks() {
-    add_log "Escaneando dispositivos de armazenamento..."
-    animate_loading "Buscando discos disponíveis..." 2
+	add_log "Escaneando dispositivos de armazenamento..."
+	animate_loading "Buscando discos disponíveis..." 2
 
-    # Lista de discos simulados
-    echo "nvme0n1 (512GB) - Samsung SSD 970 EVO"
-    echo "sda (1TB) - Western Digital Blue"
-    echo "sdb (2TB) - Seagate Barracuda"
+	# Lista de discos simulados
+	echo "nvme0n1 (512GB) - Samsung SSD 970 EVO"
+	echo "sda (1TB) - Western Digital Blue"
+	echo "sdb (2TB) - Seagate Barracuda"
 
-    add_log "✓ 3 discos encontrados"
+	add_log "✓ 3 discos encontrados"
 }
 
 # Simula formatação de disco
 mock_format_disk() {
-    local disk="$1"
-    add_log "Iniciando formatação do disco $disk..."
+	local disk="$1"
+	add_log "Iniciando formatação do disco $disk..."
 
-    # Simula wipefs
-    animate_loading "Limpando tabela de partições..." 2
-    add_log "✓ Tabela de partições limpa"
+	# Simula wipefs
+	animate_loading "Limpando tabela de partições..." 2
+	add_log "✓ Tabela de partições limpa"
 
-    # Simula criação de partição EFI
-    animate_loading "Criando partição EFI (512MB)..." 2
-    add_log "✓ Partição EFI criada"
+	# Simula criação de partição EFI
+	animate_loading "Criando partição EFI (512MB)..." 2
+	add_log "✓ Partição EFI criada"
 
-    # Simula formatação EFI
-    animate_loading "Formatando partição EFI (FAT32)..." 2
-    add_log "✓ Partição EFI formatada"
+	# Simula formatação EFI
+	animate_loading "Formatando partição EFI (FAT32)..." 2
+	add_log "✓ Partição EFI formatada"
 
-    # Simula criação de partição ZFS
-    animate_loading "Criando partição ZFS..." 2
-    add_log "✓ Partição ZFS criada"
+	# Simula criação de partição ZFS
+	animate_loading "Criando partição ZFS..." 2
+	add_log "✓ Partição ZFS criada"
 }
 
 # Simula criação de pool ZFS
 mock_create_zfs_pool() {
-    add_log "Iniciando criação do pool ZFS..."
+	add_log "Iniciando criação do pool ZFS..."
 
-    animate_loading "Criando pool ZFS ($POOL_NAME)..." 3
-    add_log "✓ Pool ZFS criado com sucesso"
+	animate_loading "Criando pool ZFS ($POOL_NAME)..." 3
+	add_log "✓ Pool ZFS criado com sucesso"
 
-    animate_loading "Configurando datasets ZFS..." 2
-    add_log "✓ Datasets ROOT/debian criados"
-    add_log "✓ Datasets home/root criados"
+	animate_loading "Configurando datasets ZFS..." 2
+	add_log "✓ Datasets ROOT/debian criados"
+	add_log "✓ Datasets home/root criados"
 
-    animate_loading "Configurando propriedades ZFS..." 1
-    add_log "✓ Propriedades configuradas"
+	animate_loading "Configurando propriedades ZFS..." 1
+	add_log "✓ Propriedades configuradas"
 }
 
 # Simula montagem de sistema
 mock_mount_system() {
-    add_log "Montando hierarquia ZFS..."
+	add_log "Montando hierarquia ZFS..."
 
-    animate_loading "Exportando e importando pool..." 2
-    add_log "✓ Pool importado em /mnt"
+	animate_loading "Exportando e importando pool..." 2
+	add_log "✓ Pool importado em /mnt"
 
-    animate_loading "Montando datasets..." 1
-    add_log "✓ ROOT/debian montado em /"
-    add_log "✓ home montado em /home"
+	animate_loading "Montando datasets..." 1
+	add_log "✓ ROOT/debian montado em /"
+	add_log "✓ home montado em /home"
 
-    animate_loading "Montando partição EFI..." 1
-    add_log "✓ EFI montado em /boot/efi"
+	animate_loading "Montando partição EFI..." 1
+	add_log "✓ EFI montado em /boot/efi"
 }
 
 # Simula extração de sistema
 mock_extract_system() {
-    add_log "Iniciando extração do sistema base..."
+	add_log "Iniciando extração do sistema base..."
 
-    local total_steps=10
-    for i in $(seq 1 $total_steps); do
-        animate_progress $i $total_steps "Extraindo arquivos"
-        sleep 0.3
-    done
-    printf "\n"
+	local total_steps=10
+	for i in $(seq 1 $total_steps); do
+		animate_progress $i $total_steps "Extraindo arquivos"
+		sleep 0.3
+	done
+	printf "\n"
 
-    add_log "✓ Sistema base extraído (4.2GB)"
+	add_log "✓ Sistema base extraído (4.2GB)"
 }
 
 # Simula configuração do sistema
 mock_configure_system() {
-    add_log "Configurando sistema..."
+	add_log "Configurando sistema..."
 
-    animate_loading "Configurando hostname..." 1
-    add_log "✓ Hostname definido: nas-zfs"
+	animate_loading "Configurando hostname..." 1
+	add_log "✓ Hostname definido: nas-zfs"
 
-    animate_loading "Configurando rede..." 1
-    add_log "✓ Configuração DHCP aplicada"
+	animate_loading "Configurando rede..." 1
+	add_log "✓ Configuração DHCP aplicada"
 
-    animate_loading "Configurando fstab..." 1
-    add_log "✓ fstab configurado"
+	animate_loading "Configurando fstab..." 1
+	add_log "✓ fstab configurado"
 
-    animate_loading "Gerando machine-id..." 1
-    add_log "✓ machine-id gerado"
+	animate_loading "Gerando machine-id..." 1
+	add_log "✓ machine-id gerado"
 }
 
 # Simula instalação do bootloader
 mock_install_bootloader() {
-    add_log "Instalando ZFSBootMenu..."
+	add_log "Instalando ZFSBootMenu..."
 
-    animate_loading "Baixando ZFSBootMenu..." 2
-    add_log "✓ ZFSBootMenu baixado"
+	animate_loading "Baixando ZFSBootMenu..." 2
+	add_log "✓ ZFSBootMenu baixado"
 
-    animate_loading "Instalando EFI..." 1
-    add_log "✓ EFI instalado em /boot/efi/EFI/ZBM"
+	animate_loading "Instalando EFI..." 1
+	add_log "✓ EFI instalado em /boot/efi/EFI/ZBM"
 
-    animate_loading "Configurando boot..." 1
-    add_log "✓ Boot configurado"
+	animate_loading "Configurando boot..." 1
+	add_log "✓ Boot configurado"
 }
 
 # Simula finalização no chroot
 mock_chroot_finalize() {
-    add_log "Finalizando instalação no chroot..."
+	add_log "Finalizando instalação no chroot..."
 
-    animate_loading "Montando sistemas de arquivos..." 1
-    add_log "✓ /dev, /proc, /sys montados"
+	animate_loading "Montando sistemas de arquivos..." 1
+	add_log "✓ /dev, /proc, /sys montados"
 
-    animate_loading "Configurando usuários..." 2
-    add_log "✓ Usuário $ADM_USER criado"
-    add_log "✓ Senhas configuradas"
+	animate_loading "Configurando usuários..." 2
+	add_log "✓ Usuário $ADM_USER criado"
+	add_log "✓ Senhas configuradas"
 
-    animate_loading "Gerando initramfs..." 3
-    add_log "✓ initramfs gerado"
+	animate_loading "Gerando initramfs..." 3
+	add_log "✓ initramfs gerado"
 
-    animate_loading "Configurando ZFS cache..." 1
-    add_log "✓ zpool.cache configurado"
+	animate_loading "Configurando ZFS cache..." 1
+	add_log "✓ zpool.cache configurado"
 }
 
 # --- Funções de Validação ---
 
 # Valida nome de usuário
 validate_username() {
-    local username="$1"
+	local username="$1"
 
-    # Verifica se está vazio
-    if [ -z "$username" ]; then
-        echo -e "\033[38;5;${ERROR}m✗ Nome de usuário não pode estar vazio\033[0m"
-        return 1
-    fi
+	# Verifica se está vazio
+	if [ -z "$username" ]; then
+		echo -e "\033[38;5;${ERROR}m✗ Nome de usuário não pode estar vazio\033[0m"
+		return 1
+	fi
 
-    # Verifica comprimento
-    if [ ${#username} -lt 3 ]; then
-        echo -e "\033[38;5;${ERROR}m✗ Nome de usuário deve ter pelo menos 3 caracteres\033[0m"
-        return 1
-    fi
+	# Verifica comprimento
+	if [ ${#username} -lt 3 ]; then
+		echo -e "\033[38;5;${ERROR}m✗ Nome de usuário deve ter pelo menos 3 caracteres\033[0m"
+		return 1
+	fi
 
-    # Verifica caracteres inválidos
-    if [[ ! "$username" =~ ^[a-z_][a-z0-9_-]*$ ]]; then
-        echo -e "\033[38;5;${ERROR}m✗ Nome de usuário contém caracteres inválidos\033[0m"
-        return 1
-    fi
+	# Verifica caracteres inválidos
+	if [[ ! "$username" =~ ^[a-z_][a-z0-9_-]*$ ]]; then
+		echo -e "\033[38;5;${ERROR}m✗ Nome de usuário contém caracteres inválidos\033[0m"
+		return 1
+	fi
 
-    # Verifica se é um nome reservado
-    local reserved=("root" "admin" "daemon" "bin" "sys" "sync" "games" "man" "lp" "mail" "news" "uucp" "proxy" "www-data" "backup" "list" "irc" "gnats" "nobody")
-    for reserved_name in "${reserved[@]}"; do
-        if [ "$username" = "$reserved_name" ]; then
-            echo -e "\033[38;5;${ERROR}m✗ '$username' é um nome de usuário reservado\033[0m"
-            return 1
-        fi
-    done
+	# Verifica se é um nome reservado
+	local reserved=("root" "admin" "daemon" "bin" "sys" "sync" "games" "man" "lp" "mail" "news" "uucp" "proxy" "www-data" "backup" "list" "irc" "gnats" "nobody")
+	for reserved_name in "${reserved[@]}"; do
+		if [ "$username" = "$reserved_name" ]; then
+			echo -e "\033[38;5;${ERROR}m✗ '$username' é um nome de usuário reservado\033[0m"
+			return 1
+		fi
+	done
 
-    echo -e "\033[38;5;${SUCCESS}m✓ Nome de usuário válido\033[0m"
-    return 0
+	echo -e "\033[38;5;${SUCCESS}m✓ Nome de usuário válido\033[0m"
+	return 0
 }
 
 # Valida força da senha
 validate_password_strength() {
-    local password="$1"
-    local strength=0
-    local feedback=()
+	local password="$1"
+	local strength=0
+	local feedback=()
 
-    # Comprimento mínimo
-    if [ ${#password} -ge 8 ]; then
-        strength=$((strength + 1))
-    else
-        feedback+=("Mínimo 8 caracteres")
-    fi
+	# Comprimento mínimo
+	if [ ${#password} -ge 8 ]; then
+		strength=$((strength + 1))
+	else
+		feedback+=("Mínimo 8 caracteres")
+	fi
 
-    # Letras maiúsculas
-    if [[ "$password" =~ [A-Z] ]]; then
-        strength=$((strength + 1))
-    else
-        feedback+=("Adicione letras maiúsculas")
-    fi
+	# Letras maiúsculas
+	if [[ "$password" =~ [A-Z] ]]; then
+		strength=$((strength + 1))
+	else
+		feedback+=("Adicione letras maiúsculas")
+	fi
 
-    # Letras minúsculas
-    if [[ "$password" =~ [a-z] ]]; then
-        strength=$((strength + 1))
-    else
-        feedback+=("Adicione letras minúsculas")
-    fi
+	# Letras minúsculas
+	if [[ "$password" =~ [a-z] ]]; then
+		strength=$((strength + 1))
+	else
+		feedback+=("Adicione letras minúsculas")
+	fi
 
-    # Números
-    if [[ "$password" =~ [0-9] ]]; then
-        strength=$((strength + 1))
-    else
-        feedback+=("Adicione números")
-    fi
+	# Números
+	if [[ "$password" =~ [0-9] ]]; then
+		strength=$((strength + 1))
+	else
+		feedback+=("Adicione números")
+	fi
 
-    # Caracteres especiais
-    if [[ "$password" =~ [^a-zA-Z0-9] ]]; then
-        strength=$((strength + 1))
-    else
-        feedback+=("Adicione caracteres especiais")
-    fi
+	# Caracteres especiais
+	if [[ "$password" =~ [^a-zA-Z0-9] ]]; then
+		strength=$((strength + 1))
+	else
+		feedback+=("Adicione caracteres especiais")
+	fi
 
-    # Exibe feedback
-    case $strength in
-    0 | 1)
-        echo -e "\033[38;5;${ERROR}mForça: Muito fraca\033[0m"
-        for msg in "${feedback[@]}"; do
-            echo -e "\033[38;5;${ERROR}m  • $msg\033[0m"
-        done
-        return 1
-        ;;
-    2)
-        echo -e "\033[38;5;${WARNING}mForça: Fraca\033[0m"
-        for msg in "${feedback[@]}"; do
-            echo -e "\033[38;5;${WARNING}m  • $msg\033[0m"
-        done
-        return 1
-        ;;
-    3)
-        echo -e "\033[38;5;${HIGHLIGHT}mForça: Média\033[0m"
-        for msg in "${feedback[@]}"; do
-            echo -e "\033[38;5;${HIGHLIGHT}m  • $msg\033[0m"
-        done
-        return 0
-        ;;
-    4)
-        echo -e "\033[38;5;${SUCCESS}mForça: Forte\033[0m"
-        return 0
-        ;;
-    5)
-        echo -e "\033[38;5;${SUCCESS}mForça: Muito forte\033[0m"
-        return 0
-        ;;
-    esac
+	# Exibe feedback
+	case $strength in
+	0 | 1)
+		echo -e "\033[38;5;${ERROR}mForça: Muito fraca\033[0m"
+		for msg in "${feedback[@]}"; do
+			echo -e "\033[38;5;${ERROR}m  • $msg\033[0m"
+		done
+		return 1
+		;;
+	2)
+		echo -e "\033[38;5;${WARNING}mForça: Fraca\033[0m"
+		for msg in "${feedback[@]}"; do
+			echo -e "\033[38;5;${WARNING}m  • $msg\033[0m"
+		done
+		return 1
+		;;
+	3)
+		echo -e "\033[38;5;${HIGHLIGHT}mForça: Média\033[0m"
+		for msg in "${feedback[@]}"; do
+			echo -e "\033[38;5;${HIGHLIGHT}m  • $msg\033[0m"
+		done
+		return 0
+		;;
+	4)
+		echo -e "\033[38;5;${SUCCESS}mForça: Forte\033[0m"
+		return 0
+		;;
+	5)
+		echo -e "\033[38;5;${SUCCESS}mForça: Muito forte\033[0m"
+		return 0
+		;;
+	esac
 }
 
 # Adicionar ao log
 add_log() {
-    local timestamp=$(date '+%H:%M:%S')
-    INSTALLATION_LOG+=("[$timestamp] $1")
+	local timestamp=$(date '+%H:%M:%S')
+	INSTALLATION_LOG+=("[$timestamp] $1")
 }
 
 # Exibir painel de logs
 show_logs() {
-    clear
-    logo_static
-    
-    echo -e "\033[1;38;5;${HIGHLIGHT}m$(center_text "📋 LOGS DA INSTALAÇÃO" 60)\033[0m"
-    echo ""
+	clear
+	logo_static
 
-    for log in "${INSTALLATION_LOG[@]}"; do
-        echo -e "\033[38;5;${TEXT_MUTED}m${log}\033[0m"
-    done
+	echo -e "\033[1;38;5;${HIGHLIGHT}m$(center_text "📋 LOGS DA INSTALAÇÃO" 60)\033[0m"
+	echo ""
 
-    echo ""
-    pause
+	for log in "${INSTALLATION_LOG[@]}"; do
+		echo -e "\033[38;5;${TEXT_MUTED}m${log}\033[0m"
+	done
+
+	echo ""
+	pause
 }
 
 # --- Início do Script ---
@@ -349,49 +349,49 @@ echo -e "\033[1;38;5;${HIGHLIGHT}m▶ Configuração de Conta\033[0m"
 echo ""
 
 while true; do
-    echo -e "\033[38;5;${TEXT_MUTED}mNome do usuário (ex: admin):\033[0m"
-    read -p "> " ADM_USER
+	echo -e "\033[38;5;${TEXT_MUTED}mNome do usuário (ex: admin):\033[0m"
+	read -p "> " ADM_USER
 
-    if validate_username "$ADM_USER"; then
-        break
-    fi
+	if validate_username "$ADM_USER"; then
+		break
+	fi
 
-    echo ""
-    echo -e "\033[38;5;${TEXT_MUTED}mTentar novamente? (s/n)\033[0m"
-    read -p "> " retry
-    if [ "$retry" != "s" ] && [ "$retry" != "S" ]; then
-        exit 1
-    fi
+	echo ""
+	echo -e "\033[38;5;${TEXT_MUTED}mTentar novamente? (s/n)\033[0m"
+	read -p "> " retry
+	if [ "$retry" != "s" ] && [ "$retry" != "S" ]; then
+		exit 1
+	fi
 done
 
 echo ""
 echo -e "\033[1;38;5;${HIGHLIGHT}m▶ Defina a senha para $ADM_USER e Root\033[0m"
 echo ""
 while true; do
-    echo ""
-    echo -e "\033[38;5;${TEXT_MUTED}mSenha:\033[0m"
-    read -s ADM_PASS
-    echo ""
+	echo ""
+	echo -e "\033[38;5;${TEXT_MUTED}mSenha:\033[0m"
+	read -s ADM_PASS
+	echo ""
 
-    if ! validate_password_strength "$ADM_PASS"; then
-        echo ""
-        echo -e "\033[38;5;${TEXT_MUTED}mUsar esta senha mesmo assim? (s/n)\033[0m"
-        read -p "> " use_weak
-        if [ "$use_weak" != "s" ] && [ "$use_weak" != "S" ]; then
-            continue
-        fi
-    fi
+	if ! validate_password_strength "$ADM_PASS"; then
+		echo ""
+		echo -e "\033[38;5;${TEXT_MUTED}mUsar esta senha mesmo assim? (s/n)\033[0m"
+		read -p "> " use_weak
+		if [ "$use_weak" != "s" ] && [ "$use_weak" != "S" ]; then
+			continue
+		fi
+	fi
 
-    echo ""
-    echo -e "\033[38;5;${TEXT_MUTED}mConfirme a senha:\033[0m"
-    read -s CONFIRM_PASS
-    echo ""
+	echo ""
+	echo -e "\033[38;5;${TEXT_MUTED}mConfirme a senha:\033[0m"
+	read -s CONFIRM_PASS
+	echo ""
 
-    if [ "$ADM_PASS" = "$CONFIRM_PASS" ] && [ -n "$ADM_PASS" ]; then
-        break
-    fi
+	if [ "$ADM_PASS" = "$CONFIRM_PASS" ] && [ -n "$ADM_PASS" ]; then
+		break
+	fi
 
-    echo -e "\033[38;5;${ERROR}m✗ As senhas não conferem ou estão vazias. Tente novamente.\033[0m"
+	echo -e "\033[38;5;${ERROR}m✗ As senhas não conferem ou estão vazias. Tente novamente.\033[0m"
 done
 
 # 4. Confirmação Final com Tabela Detalhada
@@ -415,7 +415,7 @@ echo ""
 echo -e "\033[38;5;${TEXT_MUTED}mConfirmar início da instalação? (s/n)\033[0m"
 read -p "> " confirm
 if [ "$confirm" != "s" ] && [ "$confirm" != "S" ]; then
-    exit 1
+	exit 1
 fi
 
 # 5. Execução Técnica Simulada com Animações
@@ -510,17 +510,17 @@ read -p "> " choice
 
 case "$choice" in
 1)
-    show_logs
-    ;;
+	show_logs
+	;;
 2)
-    animate_loading "Reiniciando sistema..." 3
-    clear
-    success_box "Sistema reiniciado (simulação)"
-    ;;
+	animate_loading "Reiniciando sistema..." 3
+	clear
+	success_box "Sistema reiniciado (simulação)"
+	;;
 3)
-    clear
-    echo -e "\033[1;38;5;${HIGHLIGHT}mObrigado por testar o Aurora Installer!\033[0m"
-    ;;
+	clear
+	echo -e "\033[1;38;5;${HIGHLIGHT}mObrigado por testar o Aurora Installer!\033[0m"
+	;;
 esac
 
 echo ""
