@@ -1,0 +1,962 @@
+#!/usr/bin/env bash
+#
+# Instalador AURORA TUI para Debian ZFS NAS - Versão Otimizada Pure Bash Bible
+# Design System v2.0 - Monochromatic Slate
+# Refatorado seguindo princípios pure-bash-bible
+# Data: 2026-01-31
+#
+
+# ═══════════════════════════════════════════════════════════════════════════════
+# STRICT MODE E CONFIGURAÇÕES DE SEGURANÇA
+# ═══════════════════════════════════════════════════════════════════════════════
+
+set -euo pipefail
+shopt -s inherit_errexit 2>/dev/null || true
+
+# Verificar versão do Bash (requer 4+ para features utilizadas)
+[[ ${BASH_VERSINFO[0]} -ge 4 ]] || {
+    printf '%s\n' "Erro: Bash 4+ é necessário" >&2
+    exit 1
+}
+
+# ═══════════════════════════════════════════════════════════════════════════════
+# VARIÁVEIS GLOBAIS E CONSTANTES
+# ═══════════════════════════════════════════════════════════════════════════════
+
+# Flag de modo simulação
+readonly MOCK_MODE=false
+
+# Variável global para modo de boot (UEFI/BIOS)
+declare BOOT_MODE=""
+
+# Pool ZFS
+readonly POOL_NAME="zroot"
+readonly ZFS_OPTS="-o ashift=12 -O compression=lz4 -O acltype=posixacl -O xattr=sa -O dnodesize=auto -O normalization=formD -O mountpoint=none -O canmount=off -O devices=off"
+
+# ═══════════════════════════════════════════════════════════════════════════════
+# AURORA DESIGN SYSTEM v2.0 - PALETA MONOCROMÁTICA SLATE
+# ═══════════════════════════════════════════════════════════════════════════════
+
+# Fundos e superfícies
+readonly DS_VOID=235      # Profundidade absoluta
+readonly DS_DEPTH=237     # Superfície base
+readonly DS_ELEVATION=239 # Cards/containers
+
+# Bordas (sutileza progressiva)
+readonly DS_WHISPER=240 # Divisores discretos
+readonly DS_MIST=243    # Bordas padrão
+
+# Textos (hierarquia de informação)
+readonly DS_FOG=245    # Labels secundárias
+readonly DS_HAZE=248   # Descrições
+readonly DS_CLOUD=250  # Corpo de texto
+readonly DS_SILVER=252 # Destaques
+
+# Acentos Slate (matiz principal)
+readonly DS_SLATE_DIM=66    # Detalhes técnicos
+readonly DS_SLATE=67        # Elementos interativos
+readonly DS_SLATE_GLOW=68   # Hover/foco
+readonly DS_AURORA_PEAK=153 # Estado ativo (único brilhante)
+
+# Funcionais (uso restrito <5%)
+readonly DS_SUCCESS=108 # Sucesso
+readonly DS_WARNING=179 # Aviso
+readonly DS_ERROR=167   # Erro
+
+# Caracteres UI
+readonly UI_H='─'
+readonly UI_H_D='═'
+readonly UI_ARROW='▶'
+readonly UI_BULLET='●'
+readonly UI_CHECK='✓'
+readonly UI_WARN='⚠'
+
+# ═══════════════════════════════════════════════════════════════════════════════
+# FUNÇÕES DE UTILIDADE (PURE BASH)
+# ═══════════════════════════════════════════════════════════════════════════════
+
+# Trim leading/trailing whitespace - Pure Bash alternative to sed/awk
+trim_string() {
+    local tmp="$1"
+    tmp="${tmp#"${tmp%%[![:space:]]*}"}"   # Remove leading
+    tmp="${tmp%%"${tmp##*[![:space:]]}"}"   # Remove trailing
+    printf '%s' "$tmp"
+}
+
+# Valida hostname conforme RFC 1123
+# Retorna 0 se válido, 1 se inválido
+validate_hostname() {
+    local hostname="$1"
+    
+    # Remove espaços em branco
+    hostname=$(trim_string "$hostname")
+    
+    # Verifica se está vazio
+    [[ -z "$hostname" ]] && return 1
+    
+    # Verifica comprimento máximo (253 caracteres)
+    [[ ${#hostname} -gt 253 ]] && return 1
+    
+    # Verifica se começa ou termina com hífen
+    [[ "$hostname" == -* ]] && return 1
+    [[ "$hostname" == *- ]] && return 1
+    
+    # Verifica se contém apenas caracteres válidos (a-z, A-Z, 0-9, hífen, ponto)
+    if [[ ! "$hostname" =~ ^[a-zA-Z0-9]([a-zA-Z0-9-]{0,61}[a-zA-Z0-9])?(\.[a-zA-Z0-9]([a-zA-Z0-9-]{0,61}[a-zA-Z0-9])?)*$ ]]; then
+        return 1
+    fi
+    
+    # Verifica se cada label tem no máximo 63 caracteres
+    local IFS='.'
+    local -a labels=($hostname)
+    for label in "${labels[@]}"; do
+        [[ ${#label} -gt 63 ]] && return 1
+    done
+    
+    return 0
+}
+
+# Check if string contains substring
+contains() {
+    [[ $1 == *"$2"* ]]
+}
+
+# Check if string starts with prefix
+starts_with() {
+    [[ $1 == "$2"* ]]
+}
+
+# Check if string ends with suffix
+ends_with() {
+    [[ $1 == *"$2" ]]
+}
+
+# Extract first field from string (alternative to awk '{print $1}')
+first_field() {
+    printf '%s' "${1%% *}"
+}
+
+# Extract content between parentheses (alternative to awk -F'[()]')
+extract_between_parens() {
+    local tmp="${1#*\(}"
+    printf '%s' "${tmp%\)*}"
+}
+
+# Repeat character N times (alternative to seq + printf)
+repeat_char() {
+    local char="$1"
+    local count="$2"
+    local result=""
+    for ((i=0; i<count; i++)); do
+        result+="$char"
+    done
+    printf '%s' "$result"
+}
+
+# Generate horizontal line
+h_line() {
+    local width="${1:-60}"
+    repeat_char "$UI_H" "$width"
+}
+
+# ═══════════════════════════════════════════════════════════════════════════════
+# HANDLERS DE SINAIS E CLEANUP
+# ═══════════════════════════════════════════════════════════════════════════════
+
+cleanup() {
+    local exit_code=$?
+    
+    # Unmount em ordem reversa se existirem
+    [[ -d /mnt/boot/efi ]] && umount /mnt/boot/efi 2>/dev/null || true
+    [[ -d /mnt/dev ]] && umount /mnt/dev 2>/dev/null || true
+    [[ -d /mnt/proc ]] && umount /mnt/proc 2>/dev/null || true
+    [[ -d /mnt/sys ]] && umount /mnt/sys 2>/dev/null || true
+    
+    # Export pool se importado
+    zpool list "$POOL_NAME" &>/dev/null && zpool export "$POOL_NAME" 2>/dev/null || true
+    
+    exit $exit_code
+}
+
+cleanup_interrupted() {
+    printf '\n\n%s\n' "$(gum style --foreground "$DS_WARNING" "Instalação interrompida pelo usuário")"
+    cleanup
+}
+
+trap cleanup EXIT
+trap cleanup_interrupted INT TERM
+
+# ═══════════════════════════════════════════════════════════════════════════════
+# COMPONENTES DE UI AURORA v2.0
+# ═══════════════════════════════════════════════════════════════════════════════
+
+# Hero header com bordas duplas e identidade premium
+hero_header() {
+    local title="${1:-AURORA INSTALLER}"
+    local subtitle="${2:-Debian ZFS NAS - High Performance Storage}"
+
+    clear
+    gum style \
+        --foreground "$DS_AURORA_PEAK" \
+        --border-foreground "$DS_SLATE" \
+        --border double \
+        --align center \
+        --width 60 \
+        --margin "1 2" \
+        --padding "1 2" \
+        "$title" "$subtitle"
+}
+
+# Função para simular execução de comandos
+run_step_mock() {
+    local title="$1"
+    local duration="${2:-2}"
+
+    gum spin \
+        --spinner minidot \
+        --spinner.foreground "$DS_SLATE" \
+        --title "$title" \
+        --title.foreground "$DS_HAZE" \
+        -- sleep "$duration"
+}
+
+# Separador visual elegante
+separator() {
+    gum style --foreground "$DS_MIST" --bold "$(h_line 60)"
+}
+
+# Header de seção com hierarquia clara
+section_header() {
+    local title="$1"
+    printf '\n'
+    separator
+    gum style --foreground "$DS_SILVER" --bold "  $UI_ARROW $title"
+    separator
+}
+
+# Subheader para agrupamentos
+subheader() {
+    local text="$1"
+    printf '\n'
+    gum style --foreground "$DS_HAZE" --italic "    $text"
+}
+
+# Card de informação com elevação sutil
+info_card() {
+    local title="$1"
+    shift
+
+    gum style \
+        --border-foreground "$DS_WHISPER" \
+        --border normal \
+        --padding "1 2" \
+        --margin "1 2" \
+        "$(gum style --foreground "$DS_SLATE_GLOW" --bold "$title")" \
+        "$(gum style --foreground "$DS_MIST" "$(h_line 40)")" \
+        "$@"
+}
+
+# Item de lista formatado
+list_item() {
+    local label="$1"
+    local value="$2"
+    gum style --width 50 \
+        "$(gum style --foreground "$DS_HAZE" "  $UI_BULLET $label:") $(gum style --foreground "$DS_SLATE_GLOW" --bold "$value")"
+}
+
+# Progress bar monocromático sofisticado
+progress_bar() {
+    local current="$1"
+    local total="$2"
+    local label="${3:-Processando...}"
+
+    local width=40
+    local filled=$((current * width / total))
+    local empty=$((width - filled))
+    local pct=$((current * 100 / total))
+
+    local bar_filled=""
+    local bar_empty=""
+
+    # Pure bash repetition (no seq)
+    for ((i=0; i<filled; i++)); do
+        bar_filled+='█'
+    done
+    for ((i=0; i<empty; i++)); do
+        bar_empty+='░'
+    done
+
+    printf '\n'
+    gum style --foreground "$DS_SLATE" \
+        "  [$bar_filled$bar_empty] $pct%%"
+    gum style --foreground "$DS_FOG" --italic \
+        "      $UI_ARROW $label"
+}
+
+# Status badges
+status_ok() {
+    gum style --foreground "$DS_SUCCESS" "  $UI_CHECK $1"
+}
+
+status_info() {
+    gum style --foreground "$DS_SLATE_DIM" "  $UI_BULLET $1"
+}
+
+status_warn() {
+    gum style --foreground "$DS_WARNING" "  $UI_WARN $1"
+}
+
+# Caixa de erro premium
+error_box() {
+    printf '\n'
+    gum style \
+        --foreground "$DS_ERROR" \
+        --border-foreground "$DS_ERROR" \
+        --border double \
+        --padding "1 2" \
+        --margin "1 2" \
+        --align center \
+        "$UI_WARN ERRO" \
+        "" \
+        "$1"
+}
+
+# Caixa de sucesso
+success_box() {
+    gum style \
+        --foreground "$DS_SUCCESS" \
+        --border-foreground "$DS_SUCCESS" \
+        --border double \
+        --padding "2 3" \
+        --margin "1 2" \
+        --align center \
+        "$@"
+}
+
+# Campo de input estilizado
+styled_input() {
+    local label="$1"
+    local placeholder="$2"
+    local value="${3-}"
+    local result=""
+
+    printf '\n'
+    gum style --foreground "$DS_CLOUD" "$label:"
+
+    if [[ -n ${value} ]]; then
+        result=$(gum input \
+            --placeholder "$placeholder" \
+            --value "$value" \
+            --prompt.foreground "$DS_SLATE" \
+            --cursor.foreground "$DS_AURORA_PEAK")
+    else
+        result=$(gum input \
+            --placeholder "$placeholder" \
+            --prompt.foreground "$DS_SLATE" \
+            --cursor.foreground "$DS_AURORA_PEAK")
+    fi
+
+    printf '%s\n' "$result"
+}
+
+# Seleção de lista estilizada
+styled_select() {
+    local title="$1"
+    shift
+
+    printf '\n'
+    gum style --foreground "$DS_CLOUD" "$title"
+    printf '\n'
+
+    printf '%s\n' "$@" | gum choose \
+        --height 8 \
+        --cursor.foreground "$DS_AURORA_PEAK" \
+        --selected.foreground "$DS_SILVER"
+}
+
+# Confirmação estilizada
+styled_confirm() {
+    local prompt="$1"
+    local affirmative="${2:-Prosseguir}"
+    local negative="${3:-Cancelar}"
+
+    printf '\n'
+    gum confirm "$prompt" \
+        --default=false \
+        --affirmative "$affirmative" \
+        --negative "$negative" \
+        --prompt.foreground "$DS_CLOUD" \
+        --selected.background "$DS_SLATE"
+}
+
+# Spinner com estilo AURORA
+styled_spinner() {
+    local title="$1"
+    gum spin \
+        --spinner minidot \
+        --spinner.foreground "$DS_SLATE" \
+        --title "$title" \
+        --title.foreground "$DS_HAZE" \
+        -- sleep "${2:-2}"
+}
+
+# ═══════════════════════════════════════════════════════════════════════════════
+# FUNÇÕES DE EXECUÇÃO SEGURA
+# ═══════════════════════════════════════════════════════════════════════════════
+
+# Executa comando com tratamento de erro (sem eval)
+run_step() {
+    local title="$1"
+    shift  # Remove title, resto são comandos e argumentos
+
+    if [[ ${MOCK_MODE} == true ]]; then
+        gum spin \
+            --spinner minidot \
+            --spinner.foreground "$DS_SLATE" \
+            --title "$title" \
+            --title.foreground "$DS_HAZE" \
+            -- sleep 2
+    else
+        if ! gum spin \
+            --spinner minidot \
+            --spinner.foreground "$DS_SLATE" \
+            --title "$title" \
+            --title.foreground "$DS_HAZE" \
+            -- "$@"; then
+            error_box "Falha ao executar: $title"
+            exit 1
+        fi
+    fi
+}
+
+# ═══════════════════════════════════════════════════════════════════════════════
+# FLUXO DE INSTALAÇÃO
+# ═══════════════════════════════════════════════════════════════════════════════
+
+# TELA 1: Boas-vindas e verificação
+show_welcome() {
+    hero_header "AURORA INSTALLER" "Debian ZFS NAS - High Performance Storage"
+
+    printf '\n'
+    gum style --foreground "$DS_HAZE" \
+        "  Bem-vindo ao instalador AURORA. Este assistente irá"
+    gum style --foreground "$DS_HAZE" \
+        "  guiá-lo através da instalação do Debian com ZFS on Root."
+
+    info_card "Requisitos do Sistema" \
+        "  $UI_BULLET Modo UEFI" \
+        "  $UI_BULLET Mínimo 4GB RAM" \
+        "  $UI_BULLET Disco de 20GB+"
+
+    styled_confirm "Iniciar instalação do sistema?" "Iniciar" "Sair" || exit 0
+}
+
+# TELA 2: Verificação de hardware
+check_hardware() {
+    hero_header
+    section_header "Verificação de Hardware"
+
+    status_info "Detectando ambiente de boot..."
+
+    # Detectar modo de boot (BIOS vs UEFI) - Pure bash
+    if [[ -d /sys/firmware/efi ]]; then
+        BOOT_MODE="UEFI"
+        status_ok "Modo UEFI detectado"
+    else
+        BOOT_MODE="BIOS"
+        status_warn "Modo BIOS/Legacy detectado"
+    fi
+
+    styled_spinner "Validando ambiente" 1
+
+    # Verificar módulos ZFS
+    if ! modprobe zfs 2>/dev/null; then
+        status_warn "Módulos ZFS não carregados automaticamente"
+    else
+        status_ok "Módulos ZFS disponíveis"
+    fi
+
+    # Verificar controladoras de armazenamento - Pure bash
+    if [[ -d /sys/class/scsi_disk ]] || { command -v lsblk &>/dev/null && lsblk -d &>/dev/null; }; then
+        status_ok "Controladoras de armazenamento ativas"
+    else
+        status_warn "Nenhuma controladora detectada"
+    fi
+
+    printf '\n'
+    styled_confirm "Prosseguir com a instalação?" "Continuar" "Voltar"
+}
+
+# TELA 3: Seleção de disco
+select_disk() {
+    hero_header
+    section_header "Seleção de Disco de Destino"
+
+    printf '\n'
+    gum style --foreground "$DS_WARNING" --align center \
+        "  $UI_WARN Atenção: Todos os dados no disco selecionado serão APAGADOS."
+    printf '\n'
+
+    # Detecção real de discos - Pure bash usando arrays (pure-bash-bible)
+    # Usando array ao invés de concatenação de strings para melhor performance
+    local -a disk_array=()
+    local line name size model
+    
+    while IFS= read -r line; do
+        # Skip empty lines and loops
+        [[ -z $line ]] && continue
+        [[ $line == *loop* ]] && continue
+        
+        # Parse fields using parameter expansion (pure bash, no awk/grep)
+        name="${line%% *}"
+        local rest="${line#* }"
+        size="${rest%% *}"
+        model="${rest#* }"
+        model="${model# }"  # Trim leading space
+        
+        # Adicionar ao array (mais eficiente que concatenação de strings)
+        disk_array+=("$name ($size) - $model")
+    done < <(lsblk -dno NAME,SIZE,MODEL 2>/dev/null || true)
+
+    if [[ ${#disk_array[@]} -eq 0 ]]; then
+        error_box "Nenhum disco encontrado disponível para instalação."
+        exit 1
+    fi
+
+    subheader "Discos detectados"
+    
+    # Criar lista formatada para display
+    local IFS=$'\n'
+    local DISK_LIST="${disk_array[*]}"
+
+    local TARGET_SELECTED
+    TARGET_SELECTED=$(printf '%s\n' "${disk_array[@]}" | gum choose \
+        --height 8 \
+        --cursor.foreground "$DS_AURORA_PEAK" \
+        --selected.foreground "$DS_SILVER")
+
+    # Extract first field (device name) using pure bash
+    local disk_name="${TARGET_SELECTED%% *}"
+    TARGET_DISK="/dev/$disk_name"
+
+    # Export for use in other functions
+    readonly TARGET_DISK
+    readonly TARGET_SELECTED
+
+    printf '\n'
+    status_ok "Disco selecionado: $TARGET_DISK"
+}
+
+# TELA 4: Configuração de usuário
+configure_user() {
+    hero_header
+    section_header "Configuração de Conta de Usuário"
+
+    printf '\n'
+    status_info "Configure as credenciais de acesso administrativo"
+    printf '\n'
+
+    local ADM_USER
+    ADM_USER=$(styled_input "Nome de usuário administrador" "ex: admin" "helton")
+
+    section_header "Definição de Senha Segura"
+
+    gum style --foreground "$DS_FOG" --italic \
+        "  A senha definida será utilizada tanto para o usuário"
+    gum style --foreground "$DS_FOG" --italic \
+        "  administrador quanto para a conta root do sistema."
+    printf '\n'
+
+    # Usar array para senha (não aparece em /proc)
+    local -a ADM_PASS_ARRAY=()
+    local -a CONFIRM_PASS_ARRAY=()
+    local pass1 pass2
+
+    while true; do
+        printf '\n'
+        gum style --foreground "$DS_CLOUD" "Digite a senha:"
+        pass1=$(gum input --password --placeholder "Senha forte" \
+            --prompt.foreground "$DS_SLATE" --cursor.foreground "$DS_AURORA_PEAK")
+        ADM_PASS_ARRAY=("$pass1")
+
+        printf '\n'
+        gum style --foreground "$DS_CLOUD" "Confirme a senha:"
+        pass2=$(gum input --password --placeholder "Repita a senha" \
+            --prompt.foreground "$DS_SLATE" --cursor.foreground "$DS_AURORA_PEAK")
+        CONFIRM_PASS_ARRAY=("$pass2")
+
+        if [[ ${ADM_PASS_ARRAY[0]} == "${CONFIRM_PASS_ARRAY[0]}" ]] && [[ -n ${ADM_PASS_ARRAY[0]} ]]; then
+            printf '\n'
+            status_ok "Senha definida com sucesso!"
+            break
+        fi
+
+        printf '\n'
+        gum style --foreground "$DS_WARNING" \
+            "  $UI_WARN As senhas não conferem ou estão vazias. Tente novamente."
+    done
+
+    # Export para uso posterior
+    readonly ADM_USER
+    ADM_PASS="${ADM_PASS_ARRAY[0]}"
+    readonly ADM_PASS
+
+    # Limpar arrays
+    ADM_PASS_ARRAY=()
+    CONFIRM_PASS_ARRAY=()
+}
+
+# TELA 5: Configuração de rede
+configure_network() {
+    hero_header
+    section_header "Configuração de Rede"
+
+    printf '\n'
+    status_info "Defina o identificador do sistema na rede"
+    printf '\n'
+
+    local HOSTNAME
+    while true; do
+        HOSTNAME=$(styled_input "Hostname do sistema" "ex: nas-zfs" "aurora-nas")
+        
+        # Validar hostname
+        if validate_hostname "$HOSTNAME"; then
+            break
+        else
+            printf '\n'
+            gum style --foreground "$DS_WARNING" \
+                "  $UI_WARN Hostname inválido. Use apenas letras, números, hífens e pontos."
+            gum style --foreground "$DS_FOG" --italic \
+                "  - Máximo 253 caracteres"
+            gum style --foreground "$DS_FOG" --italic \
+                "  - Não pode começar ou terminar com hífen"
+            gum style --foreground "$DS_FOG" --italic \
+                "  - Cada parte separada por ponto: máximo 63 caracteres"
+            printf '\n'
+        fi
+    done
+    readonly HOSTNAME
+
+    printf '\n'
+    status_ok "Hostname configurado: $HOSTNAME"
+}
+
+# TELA 6: Resumo e confirmação
+show_summary() {
+    hero_header
+    section_header "Resumo da Instalação"
+
+    printf '\n'
+    gum style --foreground "$DS_FOG" --italic \
+        "  Revise as configurações antes de prosseguir:"
+    printf '\n'
+
+    # Extract size using pure bash
+    local disk_size
+    disk_size=$(extract_between_parens "$TARGET_SELECTED")
+
+    info_card "Configurações Selecionadas" \
+        "$(list_item "Disco de destino" "$TARGET_DISK")" \
+        "$(list_item "Tamanho" "$disk_size")" \
+        "$(list_item "Usuário admin" "$ADM_USER")" \
+        "$(list_item "Hostname" "$HOSTNAME")" \
+        "$(list_item "Modo de boot" "$BOOT_MODE")" \
+        "$(list_item "Filesystem" "ZFS on Root (ZBM)")" \
+        "$(list_item "Pool ZFS" "$POOL_NAME")"
+
+    printf '\n'
+    gum style --foreground "$DS_WARNING" --align center \
+        "  $UI_WARN ESTA OPERAÇÃO IRÁ APAGAR TODOS OS DADOS DO DISCO!"
+    printf '\n'
+
+    styled_confirm "Confirmar início da instalação?" "$UI_CHECK PROSSEGUIR" "$UI_WARN CANCELAR" || exit 1
+}
+
+# TELA 7: Instalação com progresso
+run_installation() {
+    hero_header
+    section_header "Instalação em Andamento"
+
+    printf '\n'
+    gum style --foreground "$DS_FOG" --italic \
+        "  Por favor, aguarde enquanto configuramos o sistema..."
+    printf '\n'
+
+    local total_steps=8
+    local current_step=0
+
+    # Step 1: Limpar disco
+    ((current_step++))
+    progress_bar "$current_step" "$total_steps" "Limpando disco $TARGET_DISK"
+    if [[ $MOCK_MODE == true ]]; then
+        styled_spinner "Limpando disco $TARGET_DISK..." 2
+    else
+        run_step "Limpando disco $TARGET_DISK..." wipefs -a "$TARGET_DISK"
+        run_step "Zap GPT/MBR..." sgdisk --zap-all "$TARGET_DISK"
+    fi
+    status_ok "Disco preparado"
+
+    # Step 2: Particionamento condicional (BIOS vs UEFI)
+    ((current_step++))
+    if [[ $BOOT_MODE == "UEFI" ]]; then
+        progress_bar "$current_step" "$total_steps" "Configurando partições EFI e ZFS"
+        run_step "Configurando EFI (512MB)..." sgdisk -n 1:1M:+512M -t 1:EF00 "$TARGET_DISK"
+        run_step "Formatando EFI..." mkfs.vfat -F 32 -n EFI "${TARGET_DISK}1"
+        status_ok "Partição EFI criada e formatada"
+    else
+        progress_bar "$current_step" "$total_steps" "Configurando partições BIOS e ZFS"
+        run_step "Configurando BIOS boot (1MB)..." sgdisk -n 1:0:+1M -t 1:EF02 "$TARGET_DISK"
+        status_ok "Partição BIOS boot criada"
+    fi
+
+    # Step 3: Pool ZFS
+    ((current_step++))
+    progress_bar "$current_step" "$total_steps" "Criando pool ZFS $POOL_NAME"
+    run_step "Criando partição ZFS..." sgdisk -n 2:0:0 -t 2:BF01 "$TARGET_DISK"
+    run_step "Sincronizando partições..." partprobe "$TARGET_DISK"
+    sleep 2
+    # Usar array para opções ZFS (evita word splitting)
+    local -a zfs_create_args=(-f -R /mnt "$POOL_NAME")
+    # Adiciona opções de ZFS_OPTS ao array
+    IFS=' ' read -ra zfs_opts <<< "$ZFS_OPTS"
+    zfs_create_args+=("${zfs_opts[@]}")
+    zfs_create_args+=("${TARGET_DISK}2")
+    run_step "Criando Pool ZFS ($POOL_NAME)..." zpool create "${zfs_create_args[@]}"
+    subheader "Opções: ashift=12, compression=lz4, acltype=posixacl"
+    status_ok "Pool ZFS criado"
+
+    # Step 4: Datasets
+    ((current_step++))
+    progress_bar "$current_step" "$total_steps" "Configurando datasets ZFS"
+    run_step "Criando dataset ROOT..." zfs create -o mountpoint=none "$POOL_NAME/ROOT"
+    run_step "Criando dataset debian..." zfs create -o mountpoint=/ -o canmount=noauto -o "org.zfsbootmenu:commandline=quiet splash" "$POOL_NAME/ROOT/debian"
+    run_step "Criando dataset home..." zfs create -o mountpoint=/home "$POOL_NAME/home"
+    run_step "Criando dataset root..." zfs create -o mountpoint=/root "$POOL_NAME/home/root"
+    run_step "Setando bootfs..." zpool set "bootfs=$POOL_NAME/ROOT/debian" "$POOL_NAME"
+    status_ok "Datasets configurados"
+
+    # Step 5: Montagem (condicional para BIOS/UEFI)
+    ((current_step++))
+    progress_bar "$current_step" "$total_steps" "Montando hierarquia de arquivos"
+    run_step "Exportando pool..." zpool export "$POOL_NAME"
+    run_step "Importando pool..." zpool import -N -R /mnt "$POOL_NAME"
+    run_step "Montando debian..." zfs mount "$POOL_NAME/ROOT/debian"
+    run_step "Montando datasets..." zfs mount -a
+    if [[ $BOOT_MODE == "UEFI" ]]; then
+        [[ -d /mnt/boot/efi ]] || mkdir -p /mnt/boot/efi
+        # Definir permissões seguras para diretório EFI
+        chmod 755 /mnt/boot/efi || {
+            error_box "Falha ao definir permissões do diretório /mnt/boot/efi"
+            exit 1
+        }
+        run_step "Montando partição EFI..." mount "${TARGET_DISK}1" /mnt/boot/efi
+    fi
+    status_ok "Sistema de arquivos montado"
+
+    # Step 6: Extração do sistema base
+    ((current_step++))
+    progress_bar "$current_step" "$total_steps" "Extraindo sistema base (pode demorar)"
+    local SQUASHFS="/run/live/medium/live/filesystem.squashfs"
+    if [[ ! -f $SQUASHFS ]]; then
+        error_box "Imagem SquashFS não encontrada em $SQUASHFS"
+        exit 1
+    fi
+    run_step "Extraindo arquivos para o ZFS..." unsquashfs -f -d /mnt "$SQUASHFS"
+    status_ok "Sistema base extraído"
+
+    # Step 7: Configuração do sistema
+    ((current_step++))
+    progress_bar "$current_step" "$total_steps" "Aplicando configurações do sistema"
+
+    # Hostname - Pure bash (no cat)
+    # Criar diretório etc se não existir
+    [[ -d /mnt/etc ]] || mkdir -p /mnt/etc || {
+        error_box "Não foi possível criar diretório /mnt/etc"
+        exit 1
+    }
+    
+    # Configurar hostname
+    if ! printf '%s\n' "$HOSTNAME" > /mnt/etc/hostname; then
+        error_box "Falha ao criar arquivo /mnt/etc/hostname"
+        exit 1
+    fi
+    
+    # Configurar hosts
+    if ! {
+        printf '%s\t%s\n' "127.0.0.1" "localhost"
+        printf '%s\t%s\n' "127.0.1.1" "$HOSTNAME"
+    } > /mnt/etc/hosts; then
+        error_box "Falha ao criar arquivo /mnt/etc/hosts"
+        exit 1
+    fi
+    
+    status_ok "Hostname configurado: $HOSTNAME"
+
+    # Network
+    {
+        printf '%s\n' "[Match]"
+        printf '%s\n' "Name=e*"
+        printf '%s\n' "[Network]"
+        printf '%s\n' "DHCP=yes"
+    } > /mnt/etc/systemd/network/20-wired.network
+    run_step "Configurando rede (DHCP)..." true
+
+    # Machine ID - idempotent
+    [[ -f /mnt/etc/machine-id ]] && rm -f /mnt/etc/machine-id
+    [[ -f /mnt/var/lib/dbus/machine-id ]] && rm -f /mnt/var/lib/dbus/machine-id
+    run_step "Gerando machine-id único..." true
+
+    # Fstab (apenas EFI no modo UEFI)
+    if [[ $BOOT_MODE == "UEFI" ]]; then
+        local EFI_UUID
+        EFI_UUID=$(blkid -s UUID -o value "${TARGET_DISK}1")
+        {
+            printf '%s\n' "proc /proc proc defaults 0 0"
+            printf '%s %s %s %s %s %s\n' "UUID=$EFI_UUID" "/boot/efi" "vfat" "defaults" "0" "0"
+        } > /mnt/etc/fstab
+    else
+        printf '%s\n' "proc /proc proc defaults 0 0" > /mnt/etc/fstab
+    fi
+
+    status_ok "Configurações aplicadas"
+
+    # Step 8: Bootloader condicional (BIOS vs UEFI)
+    ((current_step++))
+    progress_bar "$current_step" "$total_steps" "Instalando bootloader"
+
+    if [[ $BOOT_MODE == "UEFI" ]]; then
+        # UEFI: ZFSBootMenu EFI
+        [[ -d /mnt/boot/efi/EFI/ZBM ]] || mkdir -p /mnt/boot/efi/EFI/ZBM
+        # Definir permissões seguras para diretórios EFI
+        chmod 755 /mnt/boot/efi/EFI/ZBM || {
+            error_box "Falha ao definir permissões do diretório /mnt/boot/efi/EFI/ZBM"
+            exit 1
+        }
+        run_step "Copiando ZFSBootMenu EFI..." cp /usr/local/bin/zfsbootmenu.efi /mnt/boot/efi/EFI/ZBM/zfsbootmenu.efi
+        [[ -d /mnt/boot/efi/EFI/BOOT ]] || mkdir -p /mnt/boot/efi/EFI/BOOT
+        chmod 755 /mnt/boot/efi/EFI/BOOT || {
+            error_box "Falha ao definir permissões do diretório /mnt/boot/efi/EFI/BOOT"
+            exit 1
+        }
+        run_step "Configurando fallback EFI..." cp /mnt/boot/efi/EFI/ZBM/zfsbootmenu.efi /mnt/boot/efi/EFI/BOOT/BOOTX64.EFI
+        if command -v efibootmgr &>/dev/null; then
+            efibootmgr --create --disk "$TARGET_DISK" --part 1 --label "ZFSBootMenu" --loader '\EFI\ZBM\zfsbootmenu.efi' 2>/dev/null || true
+        fi
+        status_ok "Bootloader UEFI instalado"
+    else
+        # BIOS: syslinux/extlinux
+        [[ -d /mnt/boot/syslinux ]] || mkdir -p /mnt/boot/syslinux
+        # Definir permissões seguras para diretório syslinux
+        chmod 755 /mnt/boot/syslinux || {
+            error_box "Falha ao definir permissões do diretório /mnt/boot/syslinux"
+            exit 1
+        }
+        run_step "Configurando syslinux..." extlinux --install /mnt/boot/syslinux 2>/dev/null || true
+        local mbr_path=""
+        [[ -f /usr/lib/syslinux/mbr.bin ]] && mbr_path="/usr/lib/syslinux/mbr.bin"
+        [[ -f /usr/lib/syslinux/mbr/mbr.bin ]] && mbr_path="/usr/lib/syslinux/mbr/mbr.bin"
+        if [[ -n $mbr_path ]]; then
+            dd if="$mbr_path" of="$TARGET_DISK" bs=440 count=1 2>/dev/null || true
+        fi
+        status_ok "Bootloader BIOS instalado"
+    fi
+
+    # Finalização no chroot
+    section_header "Finalizando Configurações"
+
+    # Bind mounts para chroot
+    mount --bind /dev /mnt/dev
+    mount --bind /proc /mnt/proc
+    mount --bind /sys /mnt/sys
+
+    # Criar script temporário para chroot (evita here-document com expansão)
+    local chroot_script
+    chroot_script=$(mktemp)
+    {
+        printf '%s\n' '#!/bin/bash'
+        printf '%s\n' 'set -e'
+        printf '%s\n' '# Gerar identificadores únicos'
+        printf '%s\n' 'systemd-machine-id-setup'
+        printf '%s\n' 'zgenhostid'
+        printf 'zpool set cachefile=/etc/zfs/zpool.cache %s\n' "$POOL_NAME"
+        printf '%s\n' 'update-initramfs -u -k all'
+        printf '\n'
+        printf '# Criar usuário administrador\n'
+        printf 'useradd -m -s /bin/bash -G sudo %q\n' "$ADM_USER"
+        printf 'echo %q:%q | chpasswd\n' "$ADM_USER" "$ADM_PASS"
+        printf 'echo %q:%q | chpasswd\n' "root" "$ADM_PASS"
+        printf '\n'
+        printf '# Remover usuário padrão se existir\n'
+        printf 'if getent passwd user >/dev/null; then userdel -r user; fi\n'
+    } > "$chroot_script"
+    chmod +x "$chroot_script"
+    
+    # Mover para dentro do chroot e executar
+    mv "$chroot_script" /mnt/tmp/chroot-setup.sh
+    run_step "Configurando sistema no chroot..." chroot /mnt /bin/bash /tmp/chroot-setup.sh
+    rm -f /mnt/tmp/chroot-setup.sh
+
+    status_ok "Sistema finalizado"
+}
+
+# TELA 8: Conclusão
+show_completion() {
+    hero_header
+
+    printf '\n'
+    success_box \
+        "$UI_CHECK INSTALAÇÃO CONCLUÍDA COM SUCESSO!" \
+        "" \
+        "Sistema AURORA instalado e configurado" \
+        "" \
+        "Hostname: $HOSTNAME" \
+        "Usuário: $ADM_USER" \
+        "Disco: $TARGET_DISK" \
+        "Modo de boot: $BOOT_MODE" \
+        "" \
+        "Remova a mídia Live e reinicie o sistema."
+
+    printf '\n'
+
+    if styled_confirm "Deseja reiniciar agora?" "$UI_CHECK Reiniciar" "Encerrar"; then
+        gum style --foreground "$DS_AURORA_PEAK" "  Reiniciando sistema..."
+        sleep 2
+        reboot
+    else
+        gum style --foreground "$DS_SLATE" "  Instalador encerrado."
+        exit 0
+    fi
+}
+
+# ═══════════════════════════════════════════════════════════════════════════════
+# PONTO DE ENTRADA PRINCIPAL
+# ═══════════════════════════════════════════════════════════════════════════════
+
+main() {
+    # Verificar execução como root
+    if [[ $EUID -ne 0 ]]; then
+        printf '%s\n' "Erro: Este script deve ser executado como root" >&2
+        exit 1
+    fi
+
+    # Verificar dependências essenciais
+    local deps=("gum" "lsblk" "sgdisk" "zpool")
+    for dep in "${deps[@]}"; do
+        if ! command -v "$dep" &>/dev/null; then
+            printf '%s\n' "Erro: Dependência '$dep' não encontrada" >&2
+            exit 1
+        fi
+    done
+
+    show_welcome
+    check_hardware
+    select_disk
+    configure_user
+    configure_network
+    show_summary
+    run_installation
+    show_completion
+}
+
+# Executa o instalador
+main "$@"
