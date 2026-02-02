@@ -33,25 +33,33 @@ log_err() {
 
 # Parâmetros
 FORCE=false
-if [[ "${1:-}" == "--force" || "${1:-}" == "-f" ]]; then
+if [[ ${1-} == "--force" || ${1-} == "-f" ]]; then
 	FORCE=true
 fi
 
 # 1. Detectar Versão e URLs via GitHub API
 log_info "Buscando metadados da versão mais recente no GitHub..."
-RELEASE_DATA=$(curl -s "${GITHUB_API}")
+if ! RELEASE_DATA=$(curl -sf "${GITHUB_API}"); then
+	log_err "Falha ao conectar na GitHub API."
+fi
 
-VERSION=$(echo "${RELEASE_DATA}" | grep -oP '"tag_name": "\K[^"]+')
-if [[ -z "${VERSION}" ]]; then
+# Parsing robusto com jq se disponível, fallback para grep
+if command -v jq &>/dev/null; then
+	VERSION=$(echo "${RELEASE_DATA}" | jq -r .tag_name)
+else
+	VERSION=$(echo "${RELEASE_DATA}" | grep -oP '"tag_name": "\K[^"]+')
+fi
+
+if [[ -z ${VERSION} || ${VERSION} == "null" ]]; then
 	log_err "Falha ao detectar a versão no GitHub API."
 fi
 log_ok "Versão detectada: ${VERSION}"
 
 # 2. Verificar Idempotência
 VERSION_FILE="${BINARY_DIR}/VERSION"
-if [[ -f "${VERSION_FILE}" ]] && [[ "${FORCE}" == "false" ]]; then
+if [[ -f ${VERSION_FILE} ]] && [[ ${FORCE} == "false" ]]; then
 	INSTALLED_VERSION=$(head -n 1 "${VERSION_FILE}" | cut -d' ' -f2)
-	if [[ "${INSTALLED_VERSION}" == "${VERSION}" ]]; then
+	if [[ ${INSTALLED_VERSION} == "${VERSION}" ]]; then
 		if [[ -f "${BINARY_DIR}/VMLINUZ.EFI" ]] && [[ $(stat -c%s "${BINARY_DIR}/VMLINUZ.EFI") -gt 1000000 ]]; then
 			log_ok "ZFSBootMenu ${VERSION} já está instalado e íntegro."
 			exit 0
@@ -69,9 +77,14 @@ download_asset() {
 	local label="$3"
 
 	log_info "Buscando URL para ${label}..."
-	local url=$(echo "${RELEASE_DATA}" | grep -oP '"browser_download_url": "\K[^"]+' | grep -E "${pattern}" | head -n 1)
+	local url=""
+	if command -v jq &>/dev/null; then
+		url=$(echo "${RELEASE_DATA}" | jq -r --arg pattern "${pattern}" '.assets[] | select(.browser_download_url | test($pattern)) | .browser_download_url' | head -n 1)
+	else
+		url=$(echo "${RELEASE_DATA}" | grep -oP '"browser_download_url": "\K[^"]+' | grep -E "${pattern}" | head -n 1)
+	fi
 
-	if [[ -z "${url}" ]]; then
+	if [[ -z ${url} ]]; then
 		log_err "Asset para ${label} não encontrado no GitHub."
 	fi
 

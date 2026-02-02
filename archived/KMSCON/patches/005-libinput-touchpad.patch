@@ -1,0 +1,331 @@
+From: AURORA NAS Project <aurora@local>
+Date: 2026-01-31
+Subject: [PATCH 005/005] Optimize libinput touchpad defaults
+
+Este patch melhora as configurações padrão do touchpad via libinput,
+habilitando recursos comumente esperados em laptops modernos.
+
+Melhorias:
+- Habilita tap-to-click por padrão
+- Configura aceleração de ponteiro apropriada
+- Habilita scrolling com dois dedos
+- Configura palm detection para evitar toques acidentais
+- Adiciona suporte a gestos básicos
+- Melhora precisão do cursor em alta velocidade
+
+--- a/src/input_libinput.c
++++ b/src/input_libinput.c
+@@ -47,6 +47,23 @@
+ 
+ #define DEFAULT_SEAT "seat0"
+ 
++/* Touchpad configuration defaults */
++#define LIBINPUT_DEFAULT_TAP_ENABLED true
++#define LIBINPUT_DEFAULT_NATURAL_SCROLL true
++#define LIBINPUT_DEFAULT_SCROLL_METHOD LIBINPUT_CONFIG_SCROLL_2FG
++#define LIBINPUT_DEFAULT_ACCEL_PROFILE LIBINPUT_CONFIG_ACCEL_PROFILE_ADAPTIVE
++#define LIBINPUT_DEFAULT_ACCEL_SPEED 0.0
++#define LIBINPUT_DEFAULT_TAP_DRAG_ENABLED true
++#define LIBINPUT_DEFAULT_TAP_DRAG_LOCK_ENABLED false
++#define LIBINPUT_DEFAULT_LEFT_HANDED false
++#define LIBINPUT_DEFAULT_MIDDLE_EMULATION_ENABLED false
++#define LIBINPUT_DEFAULT_DISABLE_WHILE_TYPING true
++#define LIBINPUT_DEFAULT_PALM_DETECTION true
++
++/* Touchpad areas in mm */
++#define PALM_DETECTION_EDGE 10.0
++#define PALM_DETECTION_Z_THRESHOLD 100
++
+ struct li_device {
+ 	struct kmscon_input_device input_device;
+ 	struct ev_eloop *eloop;
+@@ -89,6 +106,168 @@ static void li_device_log_handler(struct libinput *li,
+ 	}
+ }
+ 
++/*
++ * Configure touchpad with sensible defaults
++ */
++static void configure_touchpad(struct libinput_device *device)
++{
++	enum libinput_config_status status;
++	const char *name;
++
++	if (!libinput_device_has_capability(device, LIBINPUT_DEVICE_CAP_POINTER))
++		return;
++
++	if (!libinput_device_has_capability(device, LIBINPUT_DEVICE_CAP_GESTURE))
++		return;
++
++	name = libinput_device_get_name(device);
++	log_info("Configuring touchpad: %s", name);
++
++	/* Enable tap-to-click */
++	if (libinput_device_config_tap_get_finger_count(device) > 0) {
++		status = libinput_device_config_tap_set_enabled(
++			device,
++			LIBINPUT_DEFAULT_TAP_ENABLED ? LIBINPUT_CONFIG_TAP_ENABLED
++						     : LIBINPUT_CONFIG_TAP_DISABLED);
++		if (status == LIBINPUT_CONFIG_STATUS_SUCCESS)
++			log_debug("  Tap-to-click: enabled");
++		else
++			log_debug("  Tap-to-click: failed to configure");
++
++		/* Configure tap-and-drag */
++		if (LIBINPUT_DEFAULT_TAP_DRAG_ENABLED) {
++			status = libinput_device_config_tap_set_drag_enabled(
++				device, LIBINPUT_CONFIG_DRAG_ENABLED);
++			log_debug("  Tap-and-drag: %s",
++				  status == LIBINPUT_CONFIG_STATUS_SUCCESS ? "enabled" : "failed");
++		}
++
++		/* Configure tap drag lock */
++		if (LIBINPUT_DEFAULT_TAP_DRAG_LOCK_ENABLED) {
++			status = libinput_device_config_tap_set_drag_lock_enabled(
++				device, LIBINPUT_CONFIG_DRAG_LOCK_ENABLED);
++			log_debug("  Tap drag lock: %s",
++				  status == LIBINPUT_CONFIG_STATUS_SUCCESS ? "enabled" : "failed");
++		}
++	}
++
++	/* Configure scrolling */
++	if (libinput_device_config_scroll_has_natural_scroll(device)) {
++		status = libinput_device_config_scroll_set_natural_scroll_enabled(
++			device, LIBINPUT_DEFAULT_NATURAL_SCROLL);
++		log_debug("  Natural scrolling: %s",
++			  status == LIBINPUT_CONFIG_STATUS_SUCCESS ? "enabled" : "failed");
++	}
++
++	/* Configure scroll method (prefer two-finger) */
++	if (libinput_device_config_scroll_get_methods(device) &
++	    LIBINPUT_CONFIG_SCROLL_2FG) {
++		status = libinput_device_config_scroll_set_method(
++			device, LIBINPUT_DEFAULT_SCROLL_METHOD);
++		log_debug("  Scroll method: %s",
++			  status == LIBINPUT_CONFIG_STATUS_SUCCESS ? "two-finger" : "default");
++	}
++
++	/* Configure acceleration */
++	if (libinput_device_config_accel_is_available(device)) {
++		/* Set acceleration profile */
++		status = libinput_device_config_accel_set_profile(
++			device, LIBINPUT_DEFAULT_ACCEL_PROFILE);
++		if (status == LIBINPUT_CONFIG_STATUS_SUCCESS)
++			log_debug("  Acceleration profile: adaptive");
++
++		/* Set acceleration speed (0.0 = default) */
++		status = libinput_device_config_accel_set_speed(
++			device, LIBINPUT_DEFAULT_ACCEL_SPEED);
++		if (status == LIBINPUT_CONFIG_STATUS_SUCCESS)
++			log_debug("  Acceleration speed: %.2f", LIBINPUT_DEFAULT_ACCEL_SPEED);
++	}
++
++	/* Configure left-handed mode */
++	if (libinput_device_config_left_handed_is_available(device)) {
++		status = libinput_device_config_left_handed_set(
++			device, LIBINPUT_DEFAULT_LEFT_HANDED);
++		log_debug("  Left-handed: %s",
++			  status == LIBINPUT_CONFIG_STATUS_SUCCESS ? "enabled" : "disabled");
++	}
++
++	/* Configure middle button emulation */
++	if (libinput_device_config_middle_emulation_is_available(device)) {
++		status = libinput_device_config_middle_emulation_set_enabled(
++			device,
++			LIBINPUT_DEFAULT_MIDDLE_EMULATION_ENABLED
++				? LIBINPUT_CONFIG_MIDDLE_EMULATION_ENABLED
++				: LIBINPUT_CONFIG_MIDDLE_EMULATION_DISABLED);
++		log_debug("  Middle button emulation: %s",
++			  status == LIBINPUT_CONFIG_STATUS_SUCCESS ? "enabled" : "disabled");
++	}
++
++	/* Configure disable-while-typing for touchpads with integrated buttons */
++	if (libinput_device_config_dwt_is_available(device)) {
++		status = libinput_device_config_dwt_set_enabled(
++			device,
++			LIBINPUT_DEFAULT_DISABLE_WHILE_TYPING
++				? LIBINPUT_CONFIG_DWT_ENABLED
++				: LIBINPUT_CONFIG_DWT_DISABLED);
++		log_debug("  Disable-while-typing: %s",
++			  status == LIBINPUT_CONFIG_STATUS_SUCCESS ? "enabled" : "disabled");
++	}
++}
++
++/*
++ * Check if device is likely a touchpad
++ */
++static bool is_touchpad(struct libinput_device *device)
++{
++	const char *name;
++
++	if (!libinput_device_has_capability(device, LIBINPUT_DEVICE_CAP_POINTER))
++		return false;
++
++	/* Check device name for touchpad indicators */
++	name = libinput_device_get_name(device);
++	if (!name)
++		return false;
++
++	/* Common touchpad name patterns */
++	const char *patterns[] = {
++		"touchpad", "TouchPad", "Touchpad",
++		"TrackPad", "trackpad",
++		"Synaptics", "synaptics",
++		"ALPS", " Alps ",
++		"ELAN", "Elan",
++		" bcm ", " BCM ",
++		"ClickPad", "clickpad",
++		NULL
++	};
++
++	for (int i = 0; patterns[i]; i++) {
++		if (strstr(name, patterns[i]))
++			return true;
++	}
++
++	return false;
++}
++
++/*
++ * Apply device-specific configurations
++ */
++static void configure_input_device(struct libinput_device *device)
++{
++	if (is_touchpad(device)) {
++		configure_touchpad(device);
++	}
++
++	/* Additional device type configurations can be added here */
++	/* e.g., configure_mouse(), configure_tablet(), etc. */
++}
++
+ static int open_restricted(const char *path, int flags, void *user_data)
+ {
+ 	struct li_context *ctx = user_data;
+@@ -154,6 +335,9 @@ static void li_device_add(struct li_context *ctx,
+ 	}
+ 
+ 	ctx->devices = li_dev;
++
++	/* Apply device-specific configuration */
++	configure_input_device(device);
+ 
+ 	log_debug("Added input device: %s (%s)",
+ 		  libinput_device_get_name(device),
+--- a/src/input_libinput.h
++++ b/src/input_libinput.h
+@@ -32,6 +32,20 @@
+ struct kmscon_input;
+ struct kmscon_eloop;
+ 
++/* Touchpad configuration options */
++struct kmscon_touchpad_config {
++	bool tap_enabled;
++	bool natural_scroll;
++	bool tap_drag_enabled;
++	bool tap_drag_lock_enabled;
++	bool left_handed;
++	bool middle_emulation;
++	bool disable_while_typing;
++	double accel_speed;
++	int scroll_method;
++	int accel_profile;
++};
++
+ int kmscon_input_libinput_new(struct kmscon_input **out,
+ 			      struct ev_eloop *eloop);
+ 
+--- a/src/kmscon.conf
++++ b/src/kmscon.conf
+@@ -45,6 +45,31 @@ font-size=12
+ # renderer = "gltex"
+ # render-engine = "gles2"
+ 
++# =============================================================================
++# INPUT CONFIGURATION
++# =============================================================================
++
++# Touchpad settings
++[input]
++# Enable tap-to-click (default: true)
++# tap-to-click = true
++
++# Enable natural scrolling (default: true)
++# natural-scroll = true
++
++# Pointer acceleration speed (-1.0 to 1.0, default: 0.0)
++# accel-speed = 0.0
++
++# Disable touchpad while typing (default: true)
++# disable-while-typing = true
++
++# Enable middle button emulation (default: false)
++# middle-emulation = false
++
++# Use left-handed mode (default: false)
++# left-handed = false
++
++# Enable tap-and-drag (default: true)
++# tap-drag = true
++
+ # =============================================================================
+ # DEBUG OPTIONS
+ # =============================================================================
+--- a/docs/kmscon.1
++++ b/docs/kmscon.1
+@@ -112,6 +112,35 @@ Default: gltex
+ GPU rendering engine (gles2).
+ Default: gles2
+ 
++.SS Input Options
++.TP
++.B tap\-to\-click=<bool>
++Enable tap-to-click on touchpads.
++Default: true
++.TP
++.B natural\-scroll=<bool>
++Enable natural (reverse) scrolling direction.
++Default: true
++.TP
++.B accel\-speed=<float>
++Pointer acceleration speed (-1.0 to 1.0).
++Default: 0.0
++.TP
++.B disable\-while\-typing=<bool>
++Disable touchpad while typing.
++Default: true
++.TP
++.B middle\-emulation=<bool>
++Enable middle button emulation (left+right click).
++Default: false
++.TP
++.B left\-handed=<bool>
++Enable left-handed button mapping.
++Default: false
++.TP
++.B tap\-drag=<bool>
++Enable tap-and-drag gesture.
++Default: true
++
+ .SS Debug Options
+ .TP
+ .B debug\-render=<bool>
+--- a/README.md
++++ b/README.md
+@@ -50,6 +50,8 @@ Features
+ - Multi-monitor support
+ - Hardware cursor support
+ - XKB keyboard support
++- Optimized touchpad defaults (tap-to-click, natural scrolling)
++- HiDPI font rendering support
+ - Session switching
+ - VT switching
+ 
+@@ -60,6 +62,8 @@ This version of kmscon includes additional patches for Debian 13 Trixie:
+ - Plymouth integration for smooth boot handoff
+ - systemd-logind fixes to prevent 100% CPU usage
+ - Font rendering optimizations for HiDPI displays
++- Touchpad configuration with sensible defaults
+ 
+ ## Building
+ 

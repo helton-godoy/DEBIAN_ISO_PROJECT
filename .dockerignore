@@ -1,0 +1,132 @@
+# =============================================================================
+# Docker Ignore for KMSCON Build
+# =============================================================================
+# Arquivos e diretórios ignorados durante build do container
+# =============================================================================
+
+# Git
+.git
+.gitignore
+.gitattributes
+.gitmodules
+
+# CI/CD
+.github/
+.gitlab-ci.yml
+.travis.yml
+.azure-pipelines.yml
+Jenkinsfile
+
+# IDE e editores
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+.vim/
+.nvimrc
+.emacs*
+
+# Sistema operacional
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# Logs
+*.log
+logs/
+log/
+
+# Cache local (evita copiar para container)
+.cache/
+__pycache__/
+*.pyc
+*.pyo
+.mypy_cache/
+.pytest_cache/
+
+# Diretórios de build
+build/
+dist/
+out/
+output/
+target/
+*.o
+*.a
+*.so
+*.dylib
+*.dll
+*.exe
+
+# Cache de pacotes
+node_modules/
+vendor/
+.bundle/
+
+# Arquivos de ambiente
+.env
+.env.local
+.env.*.local
+.envrc
+*.secret
+*.key
+*.pem
+*.crt
+
+# Documentação gerada
+docs/_build/
+docs/site/
+site/
+*.html.pdf
+
+# Testes e cobertura
+coverage/
+.coverage
+*.cover
+htmlcov/
+test-results/
+
+# Arquivos temporários
+tmp/
+temp/
+*.tmp
+*.temp
+*.bak
+
+# ISO e imagens grandes
+*.iso
+*.img
+*.qcow2
+*.vmdk
+*.vdi
+
+# Cache específico do projeto (mantido em volumes)
+kmscon-cache/
+.kmscon-cache/
+
+# Arquivos de lock (serão criados no container)
+*.lock
+
+# Archives
+*.tar
+*.tar.gz
+*.tar.xz
+*.tar.bz2
+*.zip
+*.rar
+*.7z
+
+# Database
+*.db
+*.sqlite
+*.sqlite3
+
+# Misc
+*.pid
+*.seed
+*.pid.lock
+
+# Live-build artifacts (são gerados durante build)
+live_config/cache/
+live_config/chroot/
+live_config/binary/

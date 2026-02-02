@@ -1,0 +1,323 @@
+#!/bin/bash
+# =============================================================================
+# Hook Bootstrap: Preparação do Cache DKMS para Live-Build
+# =============================================================================
+# Descrição: Hook executado durante a fase bootstrap do live-build
+#              Configura a estrutura de cache DKMS antes do chroot
+# Prioridade: 0001 (execução precoce)
+# =============================================================================
+
+set -e
+
+# =============================================================================
+# CONSTANTES E CONFIGURAÇÕES
+# =============================================================================
+
+readonly HOOK_NAME="dkms-cache-bootstrap"
+readonly CACHE_HOST_DIR="${DKMS_CACHE_HOST_DIR:-cache/dkms}"
+readonly CACHE_BASE_DIR="/var/cache/dkms-build"
+readonly LOG_FILE="/var/log/${HOOK_NAME}.log"
+
+# Variáveis do ambiente de build
+readonly LB_DISTRIBUTION="${LB_DISTRIBUTION:-trixie}"
+readonly LB_ARCHITECTURE="${LB_ARCHITECTURE:-amd64}"
+
+# =============================================================================
+# FUNÇÕES DE UTILIDADE
+# =============================================================================
+
+log_info() {
+    local message="$1"
+    local timestamp
+    timestamp="$(date '+%Y-%m-%d %H:%M:%S')"
+    echo "[$timestamp] [INFO] $message"
+    echo "[$timestamp] [INFO] $message" >> "$LOG_FILE" 2>/dev/null || true
+}
+
+log_warn() {
+    local message="$1"
+    local timestamp
+    timestamp="$(date '+%Y-%m-%d %H:%M:%S')"
+    echo "[$timestamp] [WARN] $message" >&2
+    echo "[$timestamp] [WARN] $message" >> "$LOG_FILE" 2>/dev/null || true
+}
+
+log_error() {
+    local message="$1"
+    local timestamp
+    timestamp="$(date '+%Y-%m-%d %H:%M:%S')"
+    echo "[$timestamp] [ERROR] $message" >&2
+    echo "[$timestamp] [ERROR] $message" >> "$LOG_FILE" 2>/dev/null || true
+}
+
+# =============================================================================
+# FUNÇÕES DE CONFIGURAÇÃO DO CACHE
+# =============================================================================
+
+# Cria estrutura de diretórios do cache DKMS no host
+setup_cache_directories() {
+    log_info "Configurando estrutura de diretórios de cache..."
+    
+    # Cria diretório de cache no host (relativo ao live_build)
+    local cache_dirs=(
+        "$CACHE_HOST_DIR/ccache"
+        "$CACHE_HOST_DIR/dkms"
+        "$CACHE_HOST_DIR/modules"
+        "$CACHE_HOST_DIR/headers"
+        "$CACHE_HOST_DIR/.locks"
+        "$CACHE_HOST_DIR/.metadata"
+    )
+    
+    for dir in "${cache_dirs[@]}"; do
+        if [[ ! -d "$dir" ]]; then
+            mkdir -p "$dir" || {
+                log_error "Falha ao criar diretório: $dir"
+                return 1
+            }
+            log_info "Diretório criado: $dir"
+        fi
+    done
+    
+    # Configura permissões
+    chmod -R 755 "$CACHE_HOST_DIR" 2>/dev/null || true
+    
+    return 0
+}
+
+# Configura bind mounts para persistência do cache
+setup_bind_mounts() {
+    log_info "Configurando bind mounts para cache..."
+    
+    # O bind mount real será feito no chroot, mas aqui preparamos os pontos de montagem
+    # Cria arquivo de configuração para o hook chroot saber onde montar
+    
+    local mount_config="$CACHE_HOST_DIR/.mount-config"
+    
+    cat > "$mount_config" << EOF
+# Configuração de bind mounts DKMS Cache
+# Gerado automaticamente pelo hook bootstrap
+CACHE_HOST_DIR=$CACHE_HOST_DIR
+CACHE_BASE_DIR=$CACHE_BASE_DIR
+BIND_MOUNTS_READY=true
+EOF
+    
+    log_info "Configuração de bind mounts salva em: $mount_config"
+    return 0
+}
+
+# Verifica e instala ccache se necessário
+ensure_ccache() {
+    log_info "Verificando disponibilidade de ccache..."
+    
+    if command -v ccache &>/dev/null; then
+        local ccache_version
+        ccache_version=$(ccache --version | head -1)
+        log_info "ccache disponível: $ccache_version"
+        
+        # Cria diretório de cache do ccache
+        mkdir -p "$CACHE_HOST_DIR/ccache"
+        
+        # Configura ccache para uso com DKMS
+        export CCACHE_DIR="$CACHE_HOST_DIR/ccache"
+        export CCACHE_MAXSIZE="10G"
+        
+        # Inicializa ccache
+        ccache -M 10G &>/dev/null || true
+        
+        return 0
+    else
+        log_warn "ccache não disponível - cache de compilação será limitado"
+        return 1
+    fi
+}
+
+# =============================================================================
+# FUNÇÕES DE KERNEL HEADERS
+# =============================================================================
+
+# Verifica correspondência de kernel headers
+verify_kernel_headers() {
+    log_info "Verificando configuração de kernel headers..."
+    
+    # Extrai versão do kernel dos pacotes linux-headers
+    local kernel_version
+    
+    # Tenta obter versão dos headers disponíveis
+    if command -v apt-cache &>/dev/null; then
+        kernel_version=$(apt-cache show linux-headers-amd64 2>/dev/null | \
+            grep -E '^Depends:' | \
+            grep -oE 'linux-headers-[0-9]+\.[0-9]+\.[0-9]+[^,]*' | \
+            head -1 | \
+            sed 's/linux-headers-//')
+    fi
+    
+    if [[ -n "$kernel_version" ]]; then
+        log_info "Versão do kernel detectada: $kernel_version"
+        
+        # Salva informação para uso no chroot
+        echo "$kernel_version" > "$CACHE_HOST_DIR/.kernel-version"
+        
+        # Verifica se headers correspondem à versão
+        if [[ -d "$CACHE_HOST_DIR/headers/$kernel_version" ]]; then
+            log_info "Headers em cache encontrados para: $kernel_version"
+        else
+            log_info "Headers não em cache - serão baixados durante build"
+        fi
+    else
+        log_warn "Não foi possível detectar versão do kernel automaticamente"
+    fi
+}
+
+# Prepara headers do kernel para cache
+prepare_kernel_headers_cache() {
+    log_info "Preparando cache de kernel headers..."
+    
+    local headers_cache="$CACHE_HOST_DIR/headers"
+    mkdir -p "$headers_cache"
+    
+    # Cria manifesto de headers
+    local headers_manifest="$headers_cache/.manifest"
+    
+    cat > "$headers_manifest" << EOF
+# Manifesto de Kernel Headers DKMS Cache
+# Distribuição: $LB_DISTRIBUTION
+# Arquitetura: $LB_ARCHITECTURE
+# Gerado em: $(date -Iseconds)
+
+EOF
+    
+    log_info "Manifesto de headers criado em: $headers_manifest"
+}
+
+# =============================================================================
+# FUNÇÕES DE VALIDAÇÃO E INTEGRIDADE
+# =============================================================================
+
+# Verifica integridade de cache existente
+verify_cache_integrity() {
+    log_info "Verificando integridade de cache existente..."
+    
+    local cache_valid=true
+    local issues=0
+    
+    # Verifica diretórios essenciais
+    local required_dirs=("ccache" "dkms" "modules")
+    for dir in "${required_dirs[@]}"; do
+        if [[ -d "$CACHE_HOST_DIR/$dir" ]]; then
+            # Verifica permissões
+            if [[ ! -r "$CACHE_HOST_DIR/$dir" ]] || [[ ! -w "$CACHE_HOST_DIR/$dir" ]]; then
+                log_warn "Permissões incorretas em: $dir"
+                chmod -R u+rw "$CACHE_HOST_DIR/$dir" 2>/dev/null || true
+                ((issues++)) || true
+            fi
+        fi
+    done
+    
+    # Verifica se há cache corrompido (arquivos vazios ou truncados)
+    if [[ -d "$CACHE_HOST_DIR/modules" ]]; then
+        while IFS= read -r -d '' ko_file; do
+            if [[ ! -s "$ko_file" ]]; then
+                log_warn "Arquivo de módulo vazio encontrado: $ko_file"
+                rm -f "$ko_file"
+                ((issues++)) || true
+            fi
+        done < <(find "$CACHE_HOST_DIR/modules" -name "*.ko" -size 0 -print0 2>/dev/null || true)
+    fi
+    
+    if [[ $issues -eq 0 ]]; then
+        log_info "Cache existente está íntegro"
+    else
+        log_warn "Cache teve $issues problemas corrigidos"
+    fi
+    
+    return 0
+}
+
+# Gera relatório de estado do cache
+generate_cache_report() {
+    log_info "Gerando relatório de cache..."
+    
+    local report_file="$CACHE_HOST_DIR/.bootstrap-report"
+    local cache_size="N/A"
+    local ccache_stats="N/A"
+    
+    if [[ -d "$CACHE_HOST_DIR" ]]; then
+        cache_size=$(du -sh "$CACHE_HOST_DIR" 2>/dev/null | cut -f1)
+    fi
+    
+    if command -v ccache &>/dev/null && [[ -d "$CACHE_HOST_DIR/ccache" ]]; then
+        ccache_stats=$(CCACHE_DIR="$CACHE_HOST_DIR/ccache" ccache -s 2>/dev/null | head -20 || echo "N/A")
+    fi
+    
+    cat > "$report_file" << EOF
+# DKMS Cache Bootstrap Report
+# Gerado em: $(date -Iseconds)
+# Hook: $HOOK_NAME
+
+## Informações do Build
+- Distribuição: $LB_DISTRIBUTION
+- Arquitetura: $LB_ARCHITECTURE
+- Diretório de Cache: $CACHE_HOST_DIR
+
+## Estatísticas
+- Tamanho Total do Cache: $cache_size
+
+## Estatísticas do ccache
+\`\`\`
+$ccache_stats
+\`\`\`
+
+## Status
+- Bootstrap: OK
+- Cache Pronto: true
+EOF
+    
+    log_info "Relatório salvo em: $report_file"
+}
+
+# =============================================================================
+# FUNÇÃO PRINCIPAL
+# =============================================================================
+
+main() {
+    echo "================================================"
+    echo "Hook Bootstrap: DKMS Cache Setup"
+    echo "================================================"
+    
+    log_info "Iniciando hook bootstrap de cache DKMS..."
+    
+    # 1. Configura estrutura de diretórios
+    if ! setup_cache_directories; then
+        log_error "Falha na configuração de diretórios de cache"
+        exit 1
+    fi
+    
+    # 2. Configura bind mounts
+    setup_bind_mounts || log_warn "Problemas na configuração de bind mounts"
+    
+    # 3. Verifica ccache
+    ensure_ccache || log_warn "ccache não disponível"
+    
+    # 4. Prepara cache de headers
+    prepare_kernel_headers_cache
+    
+    # 5. Verifica headers do kernel
+    verify_kernel_headers || log_warn "Verificação de headers falhou"
+    
+    # 6. Verifica integridade de cache existente
+    verify_cache_integrity || log_warn "Problemas de integridade detectados"
+    
+    # 7. Gera relatório
+    generate_cache_report
+    
+    log_info "Hook bootstrap concluído com sucesso"
+    
+    echo "================================================"
+    echo "DKMS Cache preparado em: $CACHE_HOST_DIR"
+    echo "================================================"
+    
+    exit 0
+}
+
+# Executa main
+main "$@"

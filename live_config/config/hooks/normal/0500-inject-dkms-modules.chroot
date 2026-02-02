@@ -1,0 +1,71 @@
+#!/bin/bash
+# =============================================================================
+# Hook: Injeta módulos DKMS pré-compilados do cache (se existirem)
+# =============================================================================
+# Executado ANTES do hook de instalação do ZFS para evitar recompilação
+# =============================================================================
+
+set -e
+
+CACHE_DIR="/var/cache/dkms-modules"
+MANIFEST_FILE="${CACHE_DIR}/.manifest.json"
+
+log_info() { echo "[inject-dkms] [INFO] $1"; }
+log_warn() { echo "[inject-dkms] [WARN] $1" >&2; }
+
+# Verifica se cache existe
+if [[ ! -d "$CACHE_DIR" ]] || [[ ! -f "$MANIFEST_FILE" ]]; then
+    log_info "Nenhum cache de módulos DKMS encontrado, compilação normal será feita"
+    exit 0
+fi
+
+log_info "Cache de módulos DKMS encontrado!"
+
+# Lê informações do manifest
+if command -v jq &>/dev/null; then
+    CACHED_KERNEL=$(jq -r '.kernel_version // empty' "$MANIFEST_FILE" 2>/dev/null)
+    CACHED_ZFS=$(jq -r '.zfs_version // empty' "$MANIFEST_FILE" 2>/dev/null)
+else
+    CACHED_KERNEL=$(grep -oP '"kernel_version"\s*:\s*"\K[^"]+' "$MANIFEST_FILE" 2>/dev/null || echo "")
+    CACHED_ZFS=$(grep -oP '"zfs_version"\s*:\s*"\K[^"]+' "$MANIFEST_FILE" 2>/dev/null || echo "")
+fi
+
+# Detecta kernel atual do chroot
+CURRENT_KERNEL=$(ls /lib/modules/ 2>/dev/null | grep -E '^[0-9]+\.' | sort -V | tail -1)
+
+log_info "Cache: kernel=$CACHED_KERNEL, zfs=$CACHED_ZFS"
+log_info "Atual: kernel=$CURRENT_KERNEL"
+
+# Verifica compatibilidade
+if [[ "$CACHED_KERNEL" != "$CURRENT_KERNEL" ]]; then
+    log_warn "Versão do kernel diferente (cache: $CACHED_KERNEL, atual: $CURRENT_KERNEL)"
+    log_warn "Cache será ignorado, módulos serão recompilados"
+    exit 0
+fi
+
+log_info "Versões compatíveis! Injetando módulos do cache..."
+
+# Injeta /var/lib/dkms
+if [[ -d "${CACHE_DIR}/var-lib-dkms" ]]; then
+    mkdir -p /var/lib/dkms
+    cp -a "${CACHE_DIR}/var-lib-dkms/"* /var/lib/dkms/ 2>/dev/null || true
+    log_info "Módulos DKMS injetados em /var/lib/dkms"
+fi
+
+# Injeta módulos do kernel
+if [[ -d "${CACHE_DIR}/lib-modules/${CURRENT_KERNEL}" ]]; then
+    mkdir -p "/lib/modules/${CURRENT_KERNEL}/updates/dkms"
+    cp -a "${CACHE_DIR}/lib-modules/${CURRENT_KERNEL}/"* \
+        "/lib/modules/${CURRENT_KERNEL}/updates/" 2>/dev/null || true
+    log_info "Módulos do kernel injetados em /lib/modules/${CURRENT_KERNEL}"
+    
+    # Regenera módulos.dep
+    depmod -a "$CURRENT_KERNEL" 2>/dev/null || true
+    log_info "depmod executado"
+fi
+
+# Marca flag para hooks posteriores saberem que cache foi injetado
+touch /tmp/.dkms-cache-injected
+echo "$CACHED_ZFS" > /tmp/.dkms-cache-version
+
+log_info "Injeção de cache concluída!"

@@ -1,0 +1,270 @@
+#!/bin/bash
+# =============================================================================
+# Hook Chroot: Limpeza de Dados Sensíveis do Cloud-Init
+# =============================================================================
+# Descrição: Remove logs sensíveis e dados temporários do cloud-init antes
+#              do final do build da ISO
+# Prioridade: 9999 (último hook a executar)
+# =============================================================================
+
+set -euo pipefail
+
+readonly HOOK_NAME="cleanup-cloud-init"
+
+log_info() {
+    echo "[$HOOK_NAME] [INFO] $1"
+}
+
+log_warn() {
+    echo "[$HOOK_NAME] [WARN] $1" >&2
+}
+
+log_error() {
+    echo "[$HOOK_NAME] [ERROR] $1" >&2
+}
+
+# =============================================================================
+# LIMPEZA DE LOGS DO CLOUD-INIT
+# =============================================================================
+
+cleanup_cloud_init_logs() {
+    log_info "Limpando logs do cloud-init..."
+    
+    # Remove logs do cloud-init
+    rm -rf /var/log/cloud-init*.log 2>/dev/null || true
+    rm -rf /var/log/cloud-init-output.log 2>/dev/null || true
+    
+    # Remove diretório de instâncias (será recriado em runtime)
+    rm -rf /var/lib/cloud/instances/* 2>/dev/null || true
+    rm -rf /var/lib/cloud/data/* 2>/dev/null || true
+    
+    # Remove semáforos e arquivos de estado antigos
+    rm -f /var/lib/cloud/instance 2>/dev/null || true
+    rm -f /var/lib/cloud/seed/* 2>/dev/null || true
+    
+    log_info "Logs do cloud-init removidos"
+}
+
+# =============================================================================
+# LIMPEZA DE LOGS DO SISTEMA
+# =============================================================================
+
+cleanup_system_logs() {
+    log_info "Limpando logs do sistema..."
+    
+    # Trunca logs de sistema (mantém arquivos vazios)
+    find /var/log -type f -name "*.log" -exec truncate -s 0 {} \; 2>/dev/null || true
+    
+    # Remove logs rotacionados
+    find /var/log -type f -name "*.gz" -delete 2>/dev/null || true
+    find /var/log -type f -name "*.old" -delete 2>/dev/null || true
+    find /var/log -type f -name "*.1" -delete 2>/dev/null || true
+    
+    # Limpa wtmp/utmp/btmp
+    truncate -s 0 /var/log/wtmp 2>/dev/null || true
+    truncate -s 0 /var/log/btmp 2>/dev/null || true
+    truncate -s 0 /var/log/lastlog 2>/dev/null || true
+    
+    log_info "Logs do sistema limpos"
+}
+
+# =============================================================================
+# LIMPEZA DE DADOS DO QEMU-GA
+# =============================================================================
+
+cleanup_qemu_ga() {
+    log_info "Limpando dados do qemu-guest-agent..."
+    
+    # Remove logs do qemu-ga
+    rm -f /var/log/qemu-ga.log 2>/dev/null || true
+    rm -f /var/log/qemu-ga/*.log 2>/dev/null || true
+    
+    # Remove pidfiles
+    rm -f /var/run/qemu-ga.pid 2>/dev/null || true
+    
+    log_info "Dados do qemu-guest-agent removidos"
+}
+
+# =============================================================================
+# LIMPEZA DE DADOS SENSÍVEIS
+# =============================================================================
+
+cleanup_sensitive_data() {
+    log_info "Removendo dados sensíveis..."
+    
+    # Remove histórico de comandos do root
+    rm -f /root/.bash_history 2>/dev/null || true
+    rm -f /root/.sh_history 2>/dev/null || true
+    
+    # Remove histórico de todos os usuários
+    for home in /home/*; do
+        if [[ -d "$home" ]]; then
+            rm -f "$home/.bash_history" 2>/dev/null || true
+            rm -f "$home/.sh_history" 2>/dev/null || true
+            rm -f "$home/.lesshst" 2>/dev/null || true
+            rm -f "$home/.viminfo" 2>/dev/null || true
+            rm -f "$home/.mysql_history" 2>/dev/null || true
+        fi
+    done
+    
+    # Remove arquivos temporários
+    rm -rf /tmp/* 2>/dev/null || true
+    rm -rf /var/tmp/* 2>/dev/null || true
+    
+    # Remove cache do apt (preserva lista de pacotes)
+    rm -rf /var/cache/apt/archives/*.deb 2>/dev/null || true
+    rm -rf /var/cache/apt/archives/partial/* 2>/dev/null || true
+    
+    log_info "Dados sensíveis removidos"
+}
+
+# =============================================================================
+# LIMPEZA DE SSH
+# =============================================================================
+
+cleanup_ssh() {
+    log_info "Limpando chaves SSH do host..."
+    
+    # Remove chaves SSH do host (serão regeneradas no primeiro boot)
+    # Isso é importante para evitar que todas as VMs tenham as mesmas chaves
+    rm -f /etc/ssh/ssh_host_* 2>/dev/null || true
+    
+    # Cria script para regenerar chaves no primeiro boot
+    cat > /etc/systemd/system/ssh-host-key-regeneration.service << 'EOF'
+[Unit]
+Description=Regenerate SSH host keys on first boot
+Before=ssh.service
+ConditionPathExists=!/etc/ssh/ssh_host_rsa_key
+
+[Service]
+Type=oneshot
+ExecStart=/usr/sbin/dpkg-reconfigure openssh-server
+RemainAfterExit=yes
+
+[Install]
+WantedBy=multi-user.target
+EOF
+
+    # Habilita o serviço de regeneração
+    systemctl enable ssh-host-key-regeneration.service 2>/dev/null || true
+    
+    log_info "Chaves SSH do host removidas (serão regeneradas no boot)"
+}
+
+# =============================================================================
+# LIMPEZA DE CACHE
+# =============================================================================
+
+cleanup_cache() {
+    log_info "Limpando caches..."
+    
+    # Limpa cache do man
+    rm -rf /var/cache/man/* 2>/dev/null || true
+    
+    # Limpa cache do ldconfig
+    rm -f /etc/ld.so.cache 2>/dev/null || true
+    ldconfig 2>/dev/null || true
+    
+    # Limpa fontconfig cache (será recriado)
+    rm -rf /var/cache/fontconfig/* 2>/dev/null || true
+    
+    log_info "Caches limpos"
+}
+
+# =============================================================================
+# RESET DO CLOUD-INIT
+# =============================================================================
+
+reset_cloud_init() {
+    log_info "Preparando cloud-init para primeiro boot..."
+    
+    # Cria flag para indicar que é o primeiro boot
+    mkdir -p /var/lib/cloud
+    
+    # Garante que o cloud-init execute na próxima inicialização
+    rm -f /var/lib/cloud/instance/boot-finished 2>/dev/null || true
+    
+    # Remove semáforos
+    rm -f /var/lib/cloud/sem/* 2>/dev/null || true
+    
+    log_info "Cloud-init preparado para primeiro boot"
+}
+
+# =============================================================================
+# VERIFICAÇÃO FINAL
+# =============================================================================
+
+verify_cleanup() {
+    log_info "Verificando limpeza..."
+    
+    # Verifica se ainda existem logs sensíveis
+    local sensitive_files=(
+        "/var/log/cloud-init.log"
+        "/var/log/cloud-init-output.log"
+        "/root/.bash_history"
+    )
+    
+    local found=0
+    for file in "${sensitive_files[@]}"; do
+        if [[ -f "$file" ]]; then
+            log_warn "Arquivo sensível ainda existe: $file"
+            found=1
+        fi
+    done
+    
+    if [[ $found -eq 0 ]]; then
+        log_info "Verificação concluída - nenhum dado sensível encontrado"
+    else
+        log_warn "Alguns arquivos sensíveis ainda existem"
+    fi
+}
+
+# =============================================================================
+# FUNÇÃO PRINCIPAL
+# =============================================================================
+
+main() {
+    echo "================================================"
+    echo "Hook Chroot: Limpeza de Dados Sensíveis"
+    echo "================================================"
+    
+    log_info "Iniciando limpeza de dados sensíveis..."
+    
+    # 1. Limpa logs do cloud-init
+    cleanup_cloud_init_logs
+    
+    # 2. Limpa logs do sistema
+    cleanup_system_logs
+    
+    # 3. Limpa dados do qemu-ga
+    cleanup_qemu_ga
+    
+    # 4. Limpa dados sensíveis
+    cleanup_sensitive_data
+    
+    # 5. Limpa SSH
+    cleanup_ssh
+    
+    # 6. Limpa caches
+    cleanup_cache
+    
+    # 7. Reseta cloud-init
+    reset_cloud_init
+    
+    # 8. Verifica limpeza
+    verify_cleanup
+    
+    log_info "Limpeza concluída com sucesso"
+    
+    echo "================================================"
+    echo "Limpeza de dados sensíveis concluída"
+    echo "  - Logs removidos"
+    echo "  - Chaves SSH serão regeneradas no boot"
+    echo "  - Cloud-init pronto para primeiro boot"
+    echo "================================================"
+    
+    exit 0
+}
+
+# Executa main
+main "$@"

@@ -1,5 +1,10 @@
 #!/bin/sh
 # auto/config reconstruído
+# Configuração com snapshot consistente para evitar conflitos de versão
+
+# Snapshot estável do Debian Trixie (2026-02-01) para garantir consistência
+# entre bootstrap e pacotes do chroot
+DEBIAN_SNAPSHOT="https://snapshot.debian.org/archive/debian/20260201T000000Z/"
 
 lb config noauto \
 	--mode debian \
@@ -9,9 +14,13 @@ lb config noauto \
 	--parent-archive-areas 'main contrib non-free-firmware non-free' \
 	--linux-packages "linux-image linux-headers" \
 	--mirror-binary "http://ftp.br.debian.org/debian/" \
-	--mirror-chroot "http://ftp.br.debian.org/debian/" \
-	--mirror-bootstrap "http://ftp.br.debian.org/debian/" \
+	--mirror-chroot "${DEBIAN_SNAPSHOT}" \
+	--mirror-bootstrap "${DEBIAN_SNAPSHOT}" \
+	--parent-mirror-chroot "${DEBIAN_SNAPSHOT}" \
+	--parent-mirror-bootstrap "${DEBIAN_SNAPSHOT}" \
 	--binary-images iso-hybrid \
 	--bootloader grub-efi \
+	--apt-options "--no-install-recommends --assume-yes" \
+	--apt-secure false \
 	--bootappend-live "boot=live components hostname=debian-zfs-nas username=admin autologin locales=pt_BR.UTF-8 keyboard-layouts=br timezone=America/Cuiaba console=ttyS0,115200n8" \
 	"${@}"

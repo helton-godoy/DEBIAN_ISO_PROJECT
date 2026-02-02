@@ -1,0 +1,287 @@
+#!/bin/bash
+# =============================================================================
+# Hook Chroot: Configuração do Usuário Administrador
+# =============================================================================
+# Descrição: Configura senha, permissões sudo e SSH para usuários admin/debian
+#              Executado durante o chroot do live-build
+# Prioridade: 0100 (após instalação de cloud-init e qemu-ga)
+# =============================================================================
+
+set -euo pipefail
+
+readonly HOOK_NAME="setup-admin-user"
+readonly ADMIN_USER="admin"
+readonly ADMIN_PASSWORD="admin"  # Senha padrão para acesso na VM de teste
+readonly FALLBACK_USER="debian"
+readonly FALLBACK_PASSWORD="debian"
+
+log_info() {
+    echo "[$HOOK_NAME] [INFO] $1"
+}
+
+log_warn() {
+    echo "[$HOOK_NAME] [WARN] $1" >&2
+}
+
+log_error() {
+    echo "[$HOOK_NAME] [ERROR] $1" >&2
+}
+
+# =============================================================================
+# CONFIGURAÇÃO DO USUÁRIO ADMIN
+# =============================================================================
+
+setup_admin_user() {
+    log_info "Configurando usuário administrador: $ADMIN_USER"
+    
+    # Verifica se o usuário já existe (live-config pode ter criado)
+    if id "$ADMIN_USER" &>/dev/null; then
+        log_info "Usuário $ADMIN_USER já existe"
+    else
+        log_info "Criando usuário $ADMIN_USER..."
+        useradd -m -s /bin/bash -G sudo,adm,cdrom,dip,plugdev "$ADMIN_USER" || {
+            log_warn "Falha ao criar usuário $ADMIN_USER"
+            return 1
+        }
+    fi
+    
+    # Define senha do usuário
+    log_info "Definindo senha para $ADMIN_USER..."
+    echo "$ADMIN_USER:$ADMIN_PASSWORD" | chpasswd
+    
+    # Configura sudo sem senha para o usuário admin (facilita automação)
+    log_info "Configurando sudo sem senha para $ADMIN_USER..."
+    echo "$ADMIN_USER ALL=(ALL) NOPASSWD: ALL" > /etc/sudoers.d/admin-nopasswd
+    chmod 440 /etc/sudoers.d/admin-nopasswd
+    
+    log_info "Usuário $ADMIN_USER configurado com sucesso"
+    return 0
+}
+
+# =============================================================================
+# CONFIGURAÇÃO DO USUÁRIO FALLBACK (DEBIAN)
+# =============================================================================
+
+setup_fallback_user() {
+    log_info "Configurando usuário fallback: $FALLBACK_USER"
+    
+    # Verifica se o usuário já existe
+    if id "$FALLBACK_USER" &>/dev/null; then
+        log_info "Usuário $FALLBACK_USER já existe"
+    else
+        log_info "Criando usuário fallback $FALLBACK_USER..."
+        useradd -m -s /bin/bash -G sudo,adm,cdrom,dip,plugdev "$FALLBACK_USER" || {
+            log_warn "Falha ao criar usuário fallback $FALLBACK_USER"
+            return 1
+        }
+    fi
+    
+    # Define senha do usuário fallback
+    log_info "Definindo senha para $FALLBACK_USER..."
+    echo "$FALLBACK_USER:$FALLBACK_PASSWORD" | chpasswd
+    
+    # Configura sudo sem senha para o usuário fallback
+    log_info "Configurando sudo sem senha para $FALLBACK_USER..."
+    echo "$FALLBACK_USER ALL=(ALL) NOPASSWD: ALL" > /etc/sudoers.d/debian-nopasswd
+    chmod 440 /etc/sudoers.d/debian-nopasswd
+    
+    log_info "Usuário fallback $FALLBACK_USER configurado com sucesso"
+    return 0
+}
+
+# =============================================================================
+# CONFIGURAÇÃO DO SSH
+# =============================================================================
+
+configure_ssh() {
+    log_info "Configurando SSH..."
+    
+    # Garante que o diretório de configuração do SSH existe
+    mkdir -p /etc/ssh
+    
+    # Backup da configuração original
+    if [[ -f /etc/ssh/sshd_config ]] && [[ ! -f /etc/ssh/sshd_config.backup ]]; then
+        cp /etc/ssh/sshd_config /etc/ssh/sshd_config.backup
+    fi
+    
+    # Configuração do SSH para aceitar autenticação por chave e senha
+    cat > /etc/ssh/sshd_config.d/99-aurora-live.conf << 'EOF'
+# =============================================================================
+# Aurora NAS - SSH Configuration for Live System
+# =============================================================================
+
+# Autenticação por chave pública
+PubkeyAuthentication yes
+AuthorizedKeysFile .ssh/authorized_keys
+
+# Autenticação por senha (permitida para facilitar acesso em testes)
+PasswordAuthentication yes
+PermitEmptyPasswords no
+ChallengeResponseAuthentication no
+
+# Root login desabilitado por segurança
+PermitRootLogin no
+
+# Porta padrão
+Port 22
+
+# Timeout de conexão
+ClientAliveInterval 300
+ClientAliveCountMax 2
+
+# Número máximo de tentativas de autenticação
+MaxAuthTries 3
+
+# Número de sessões permitidas por usuário
+MaxSessions 10
+
+# Banner
+Banner /etc/ssh/banner
+
+# Subsistema sftp
+Subsystem sftp /usr/lib/openssh/sftp-server
+EOF
+
+    # Cria banner SSH
+    cat > /etc/ssh/banner << 'EOF'
+================================================================================
+                       Aurora NAS - Debian ZFS Live
+================================================================================
+ Atenção: Este é um sistema live para instalação e recuperação.
+ Acesso autorizado apenas para administradores do sistema.
+================================================================================
+EOF
+
+    # Cria diretórios .ssh para usuários
+    for user in "$ADMIN_USER" "$FALLBACK_USER"; do
+        if id "$user" &>/dev/null; then
+            local user_home
+            user_home=$(getent passwd "$user" | cut -d: -f6)
+            mkdir -p "${user_home}/.ssh"
+            chmod 700 "${user_home}/.ssh"
+            chown -R "$user:$user" "${user_home}/.ssh"
+            log_info "Diretório .ssh criado para $user"
+        fi
+    done
+    
+    log_info "SSH configurado com sucesso"
+}
+
+# =============================================================================
+# CONFIGURAÇÃO DE SHELL
+# =============================================================================
+
+setup_shell_environment() {
+    log_info "Configurando ambiente shell..."
+    
+    # Cria .bashrc básico para cada usuário
+    for user in "$ADMIN_USER" "$FALLBACK_USER"; do
+        if id "$user" &>/dev/null; then
+            local admin_home
+            admin_home=$(getent passwd "$user" | cut -d: -f6)
+            
+            # Garante que o diretório home existe
+            mkdir -p "$admin_home"
+            chown "$user:$user" "$admin_home"
+            
+            # Adiciona aliases úteis para debugging
+            cat >> "$admin_home/.bashrc" << 'EOF'
+
+# Aliases para debugging do Debian ZFS Live
+alias ll='ls -la'
+alias la='ls -A'
+alias l='ls -CF'
+alias ..='cd ..'
+alias ...='cd ../..'
+
+# Informações do sistema
+alias sysinfo='echo "=== System Info ===" && uname -a && echo && echo "=== Memory ===" && free -h && echo && echo "=== Disk ===" && df -h'
+
+# Aliases ZFS
+alias zlist='zfs list'
+alias zstat='zpool status'
+alias zio='zpool iostat -v'
+
+# Histórico maior
+export HISTSIZE=10000
+export HISTFILESIZE=20000
+
+# Prompt informativo
+export PS1='\[\033[01;32m\]\u@\h\[\033[00m\]:\[\033[01;34m\]\w\[\033[00m\]\$ '
+EOF
+
+            chown "$user:$user" "$admin_home/.bashrc"
+            log_info "Ambiente shell configurado para $user"
+        fi
+    done
+    
+    log_info "Ambiente shell configurado"
+}
+
+# =============================================================================
+# CONFIGURAÇÃO DE ACESSO SERIAL
+# =============================================================================
+
+configure_serial_access() {
+    log_info "Configurando acesso serial para debugging..."
+    
+    # Configura autologin no console serial para facilitar debugging
+    mkdir -p /etc/systemd/system/serial-getty@ttyS0.service.d
+    
+    cat > /etc/systemd/system/serial-getty@ttyS0.service.d/autologin.conf << EOF
+[Service]
+ExecStart=
+ExecStart=-/sbin/agetty --autologin $ADMIN_USER --keep-baud 115200,38400,9600 %I \$TERM
+EOF
+
+    log_info "Acesso serial configurado com autologin para $ADMIN_USER"
+}
+
+# =============================================================================
+# FUNÇÃO PRINCIPAL
+# =============================================================================
+
+main() {
+    echo "================================================"
+    echo "Hook Chroot: Configuração do Usuário Admin"
+    echo "================================================"
+    
+    log_info "Iniciando configuração do usuário administrador..."
+    
+    # 1. Tenta configurar usuário admin
+    if ! setup_admin_user; then
+        log_warn "Falha ao configurar usuário admin, tentando fallback..."
+        if ! setup_fallback_user; then
+            log_error "Falha ao configurar ambos os usuários!"
+            exit 1
+        fi
+    fi
+    
+    # 2. Configura usuário fallback como backup (se admin existe, fallback também é útil)
+    setup_fallback_user || log_warn "Não foi possível configurar usuário fallback"
+    
+    # 3. Configura SSH
+    configure_ssh
+    
+    # 4. Configura ambiente shell
+    setup_shell_environment
+    
+    # 5. Configura acesso serial
+    configure_serial_access
+    
+    log_info "Configuração concluída com sucesso"
+    
+    echo "================================================"
+    echo "Usuários configurados:"
+    echo "  - Username: $ADMIN_USER / Password: $ADMIN_PASSWORD"
+    echo "  - Username: $FALLBACK_USER / Password: $FALLBACK_PASSWORD"
+    echo "  - Sudo: NOPASSWD para ambos"
+    echo "  - SSH: Autenticação por chave e senha habilitada"
+    echo "  - Console Serial: Autologin como $ADMIN_USER"
+    echo "================================================"
+    
+    exit 0
+}
+
+# Executa main
+main "$@"

@@ -1,0 +1,329 @@
+From: AURORA NAS Project <aurora@local>
+Date: 2026-01-31
+Subject: [PATCH 003/005] Fix systemd-logind session handling to prevent 100% CPU
+
+Bugs conhecidos no kmscon causam consumo de 100% CPU quando não consegue
+ler configurações de assento do systemd. Este patch adiciona:
+
+- Tratamento adequado de erros em descritores de arquivo no loop epoll
+- Fallback quando logind não está disponível ou não responde
+- Prevenção de busy-loop quando session não é obtida
+- Timeout para operações de dbus com logind
+- Melhor tratamento de sessões sem assento atribuído
+
+--- a/src/logind.c
++++ b/src/logind.c
+@@ -45,6 +45,13 @@
+ #define LOGIND_SERVICE "org.freedesktop.login1"
+ #define LOGIND_PATH_SESSION "/org/freedesktop/login1/session"
+ 
++/* Timeouts and retry configuration */
++#define LOGIND_DBUS_TIMEOUT_MS 5000
++#define LOGIND_RETRY_DELAY_US 100000
++#define LOGIND_MAX_RETRIES 3
++#define LOGIND_SEAT_RETRY_DELAY_MS 500
++#define LOGIND_SEAT_MAX_RETRIES 10
++
+ struct logind_session {
+ 	unsigned long ref;
+ 	struct ev_eloop *eloop;
+@@ -67,6 +74,11 @@ struct logind_session {
+ 	bool session_invalid;
+ 	bool seat_active;
+ 	bool seat_can_graphical;
++
++	/* Retry state */
++	int retry_count;
++	struct ev_timer *retry_timer;
++	bool fallback_mode;
+ };
+ 
+ static void logind_session_destruct(struct logind_session *sess)
+@@ -78,6 +90,7 @@ static void logind_session_destruct(struct logind_session *sess)
+ 	if (sess->pending_watch) {
+ 		dbus_pending_call_cancel(sess->pending_watch);
+ 		dbus_pending_call_unref(sess->pending_watch);
++		sess->pending_watch = NULL;
+ 	}
+ 
+ 	if (sess->slot_active_change) {
+@@ -89,6 +102,11 @@ static void logind_session_destruct(struct logind_session *sess)
+ 		sess->slot_props_change = NULL;
+ 	}
+ 
++	if (sess->retry_timer) {
++		ev_timer_unref(sess->retry_timer);
++		sess->retry_timer = NULL;
++	}
++
+ 	if (sess->session) {
+ 		dbus_free(sess->session);
+ 		sess->session = NULL;
+@@ -136,6 +154,30 @@ static void logind_session_destruct(struct logind_session *sess)
+ 	return sess;
+ }
+ 
++/*
++ * Check if we should fall back to non-logind mode
++ */
++static bool should_use_fallback(struct logind_session *sess)
++{
++	/* If we've retried too many times, use fallback */
++	if (sess->retry_count >= LOGIND_MAX_RETRIES)
++		return true;
++
++	/* Check if logind service is available */
++	if (!sess->bus)
++		return true;
++
++	return false;
++}
++
++/*
++ * Enter fallback mode for systems without logind
++ */
++static void enter_fallback_mode(struct logind_session *sess)
++{
++	log_warning("Entering fallback mode without systemd-logind");
++	sess->fallback_mode = true;
++	sess->seat_active = true;
++	sess->seat_can_graphical = true;
++	sess->session_invalid = false;
++	sess->active = true;
++
++	/* Notify callback that we're in fallback mode */
++	if (sess->cb)
++		sess->cb(sess, LOGIND_SESSION_ACTIVE, sess->data);
++}
++
+ static void session_active_change(struct logind_session *sess,
+ 				  bool active)
+ {
+@@ -243,6 +285,14 @@ static void session_check(struct logind_session *sess)
+ 		return;
+ 	}
+ 
++	/* Prevent busy-loop: check if we already have a valid session */
++	if (sess->pending_watch) {
++		log_debug("Session check already pending, skipping duplicate request");
++		return;
++	}
++
++	/* Increment retry counter */
++	sess->retry_count++;
++
+ 	/* Query session properties from logind */
+ 	reply = dbus_message_new_method_call(LOGIND_SERVICE,
+ 					     sess->session_path,
+@@ -254,7 +304,9 @@ static void session_check(struct logind_session *sess)
+ 		return;
+ 	}
+ 
+-	pending = dbus_connection_send_with_reply(sess->bus, reply, &sess->pending_watch, -1);
++	/* Use timeout to prevent hanging forever */
++	pending = dbus_connection_send_with_reply(sess->bus, reply, &sess->pending_watch,
++						  LOGIND_DBUS_TIMEOUT_MS);
+ 	dbus_message_unref(reply);
+ 
+ 	if (!pending) {
+@@ -262,6 +314,12 @@ static void session_check(struct logind_session *sess)
+ 		return;
+ 	}
+ 
++	/* Set up timeout for the pending call */
++	if (!dbus_pending_call_set_notify(sess->pending_watch, session_properties_cb,
++					  sess, NULL)) {
++		log_error("Cannot set pending call notify");
++		sess->pending_watch = NULL;
++	}
++
+ 	log_debug("Requested session properties from logind");
+ }
+ 
+@@ -287,9 +345,32 @@ static void session_properties_cb(DBusPendingCall *pending, void *data)
+ 	}
+ 
+ 	if (!reply) {
+-		log_error("No reply from logind for session properties");
+-		sess->session_invalid = true;
+-		return;
++		log_warning("No reply from logind for session properties (attempt %d/%d)",
++			    sess->retry_count, LOGIND_MAX_RETRIES);
++
++		if (should_use_fallback(sess)) {
++			enter_fallback_mode(sess);
++		} else {
++			/* Schedule retry with delay */
++			log_debug("Scheduling retry of session check...");
++			usleep(LOGIND_RETRY_DELAY_US);
++			session_check(sess);
++		}
++		return;
++	}
++
++	/* Check for error reply */
++	if (dbus_message_get_type(reply) == DBUS_MESSAGE_TYPE_ERROR) {
++		const char *error_name = dbus_message_get_error_name(reply);
++		log_warning("Logind returned error: %s", error_name);
++		dbus_message_unref(reply);
++
++		if (should_use_fallback(sess)) {
++			enter_fallback_mode(sess);
++		} else {
++			sess->session_invalid = true;
++		}
++		return;
+ 	}
+ 
+ 	dbus_message_iter_init(reply, &iter);
+@@ -386,8 +467,14 @@ static int session_setup_dbus(struct logind_session *sess)
+ 	ret = dbus_bus_request_name(sess->bus, bus_name,
+ 				    DBUS_NAME_FLAG_DO_NOT_QUEUE, &error);
+ 	if (dbus_error_is_set(&error)) {
+-		log_error("Cannot request bus name: %s", error.message);
++		log_warning("Cannot request bus name: %s", error.message);
+ 		dbus_error_free(&error);
++
++		/* If we can't get a bus name, use fallback mode */
++		if (should_use_fallback(sess)) {
++			enter_fallback_mode(sess);
++			return 0;
++		}
+ 		return -EFAULT;
+ 	}
+ 
+@@ -439,6 +526,13 @@ static void session_dbus_cb(struct ev_eloop *eloop, int fd, void *data)
+ 	while (dbus_connection_dispatch(sess->bus) == DBUS_DISPATCH_DATA_REMAINS)
+ 		;
+ 
++	/* Check for dispatch errors */
++	if (!dbus_connection_get_is_connected(sess->bus)) {
++		log_warning("DBus connection lost, entering fallback mode");
++		enter_fallback_mode(sess);
++		return;
++	}
++
+ 	event_fd_update(sess);
+ }
+ 
+@@ -470,12 +564,32 @@ static int session_setup_event_fd(struct logind_session *sess)
+ 	return 0;
+ }
+ 
++/*
++ * Safe epoll wait with error handling to prevent busy-loop
++ */
+ static void session_event_cb(struct ev_eloop *eloop, int fd, void *data)
+ {
+ 	struct logind_session *sess = data;
++	struct epoll_event ev;
++	int ret;
+ 
+ 	if (!sess->active)
+ 		return;
+ 
++	/* Check if there are actual events before processing */
++	ret = epoll_wait(sess->event_fd, &ev, 1, 0);
++	if (ret < 0) {
++		if (errno != EINTR) {
++			log_error("epoll_wait failed: %m");
++			/* Disable this session to prevent busy-loop */
++			sess->active = false;
++		}
++		return;
++	}
++
++	if (ret == 0) {
++		/* No events, spurious wake-up */
++		return;
++	}
++
+ 	if (sess->seat_can_graphical && sess->seat_active) {
+ 		if (!sess->control) {
+ 			log_debug("Session gained graphics control");
+@@ -507,16 +621,37 @@ int kmscon_logind_session_new(struct logind_session **out,
+ 	}
+ 
+ 	ret = session_setup_dbus(sess);
+-	if (ret)
+-		goto err_unref;
++	if (ret) {
++		log_warning("Failed to setup dbus, using fallback mode");
++		enter_fallback_mode(sess);
++		goto out;
++	}
+ 
+ 	ret = session_setup_event_fd(sess);
+-	if (ret)
+-		goto err_unref;
++	if (ret) {
++		log_warning("Failed to setup event fd, using fallback mode");
++		enter_fallback_mode(sess);
++		goto out;
++	}
+ 
+ 	ret = session_take_control(sess);
+-	if (ret)
+-		goto err_unref;
++	if (ret) {
++		log_warning("Failed to take control of session, will retry...");
++
++		/* Try again with retry logic */
++		int retries = 0;
++		while (ret < 0 && retries < LOGIND_SEAT_MAX_RETRIES) {
++			usleep(LOGIND_SEAT_RETRY_DELAY_MS * 1000);
++			ret = session_take_control(sess);
++			retries++;
++		}
++
++		if (ret < 0) {
++			log_warning("Failed to take control after %d retries, using fallback",
++				    LOGIND_SEAT_MAX_RETRIES);
++			enter_fallback_mode(sess);
++		}
++	}
++
++out:
+ 
+ 	*out = sess;
+ 	return 0;
+@@ -550,3 +685,14 @@ bool kmscon_logind_session_is_active(struct logind_session *sess)
+ 
+ 	return sess->active;
+ }
++
++/*
++ * Check if session is using fallback mode (no logind)
++ */
++bool kmscon_logind_session_is_fallback(struct logind_session *sess)
++{
++	if (!sess)
++		return true;
++
++	return sess->fallback_mode;
++}
+--- a/src/logind.h
++++ b/src/logind.h
+@@ -37,5 +37,6 @@ void kmscon_logind_session_ref(struct logind_session *sess);
+ void kmscon_logind_session_unref(struct logind_session *sess);
+ 
+ bool kmscon_logind_session_is_active(struct logind_session *sess);
++bool kmscon_logind_session_is_fallback(struct logind_session *sess);
+ 
+ #endif /* KMSCON_LOGIND_H */
+--- a/src/app.c
++++ b/src/app.c
+@@ -345,8 +345,12 @@ static int app_session_cb(struct logind_session *sess,
+ 		app->session_active = kmscon_logind_session_is_active(sess);
+ 		log_debug("Session state changed: %s",
+ 			  app->session_active ? "active" : "inactive");
+-		if (app->session_active)
++
++		if (kmscon_logind_session_is_fallback(sess)) {
++			log_info("Running in fallback mode (no logind)");
++		}
++
++		if (app->session_active || kmscon_logind_session_is_fallback(sess))
+ 			app_wake_up(app);
+ 		else
+ 			app_go_to_sleep(app);

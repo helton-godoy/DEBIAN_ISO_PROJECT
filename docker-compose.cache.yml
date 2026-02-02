@@ -1,0 +1,317 @@
+# =============================================================================
+# Docker Compose Configuration for KMSCON Build Cache
+# =============================================================================
+# Descrição: Configuração de serviços para build do kmscon com cache multi-camada
+# Uso: docker-compose -f docker-compose.cache.yml up --build
+# =============================================================================
+
+version: "3.8"
+
+services:
+  # =============================================================================
+  # Serviço de Build do KMSCON
+  # =============================================================================
+  kmscon-builder:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      args:
+        # Build arguments (passed to Dockerfile)
+        - BUILD_DATE=${BUILD_DATE:-}
+        - VCS_REF=${VCS_REF:-}
+
+    image: aurora-nas/kmscon-builder:latest
+    container_name: kmscon-builder
+
+    # Privilégios necessários para build (alguns sistemas de build requerem)
+    privileged: false
+
+    # Capabilities adicionais (se necessário)
+    cap_add:
+      - SYS_ADMIN
+
+    # Security options
+    security_opt:
+      - seccomp:unconfined
+
+    # Variáveis de ambiente para controle de cache
+    environment:
+      # Cache Configuration
+      - KMSCON_CACHE_DIR=/var/cache/kmscon
+      - KMSCON_CACHE_ENABLED=${KMSCON_CACHE_ENABLED:-1}
+      - KMSCON_CACHE_FORCE_REFRESH=${KMSCON_CACHE_FORCE_REFRESH:-0}
+      - KMSCON_DOCKER_MODE=auto
+      - KMSCON_PARALLEL_JOBS=${KMSCON_PARALLEL_JOBS:-auto}
+      - KMSCON_APT_CACHE=1
+      - KMSCON_LOCK_TIMEOUT=${KMSCON_LOCK_TIMEOUT:-300}
+      - KMSCON_CACHE_TTL_DAYS=${KMSCON_CACHE_TTL_DAYS:-30}
+
+      # Build Configuration
+      - KMSCON_VERSION=${KMSCON_VERSION:-9.0.0}
+      - LIBTSM_VERSION=${LIBTSM_VERSION:-4.0.2}
+      - LOG_LEVEL=${LOG_LEVEL:-INFO}
+      - KEEP_BUILD=${KEEP_BUILD:-0}
+
+      # Permissions (for bind mount scenarios)
+      - HOST_UID=${HOST_UID:-1000}
+      - HOST_GID=${HOST_GID:-1000}
+
+      # Container identification
+      - CONTAINER_ID=1
+
+    # Volumes de cache multi-camada
+    volumes:
+      # Layer 1: Source Cache - Tarballs e clones git
+      - type: volume
+        source: kmscon-source-cache
+        target: /var/cache/kmscon/sources
+        volume:
+          nocopy: false
+
+      # Layer 2: Build Cache - Objetos compilados
+      - type: volume
+        source: kmscon-build-cache
+        target: /var/cache/kmscon/build
+        volume:
+          nocopy: false
+
+      # Layer 3: Package Cache - Pacotes .deb finais
+      - type: volume
+        source: kmscon-package-cache
+        target: /var/cache/kmscon/packages
+        volume:
+          nocopy: false
+
+      # Layer 4: Deps Cache - Cache de apt/packages
+      - type: volume
+        source: kmscon-deps-cache
+        target: /var/cache/kmscon/deps
+        volume:
+          nocopy: false
+
+      # Lock directory para file locking
+      - type: volume
+        source: kmscon-lock
+        target: /var/cache/kmscon/lock
+        volume:
+          nocopy: false
+
+      # Manifest e metadados
+      - type: volume
+        source: kmscon-manifest
+        target: /var/cache/kmscon
+        volume:
+          nocopy: false
+
+      # Output opcional para bind mount
+      - type: bind
+        source: ${OUTPUT_DIR:-./output}
+        target: /var/cache/kmscon-build
+        bind:
+          create_host_path: true
+
+      # Scripts de build (read-only)
+      - type: bind
+        source: ./scripts
+        target: /usr/local/share/kmscon
+        read_only: true
+        bind:
+          propagation: rprivate
+
+    # Working directory
+    working_dir: /usr/local/share/kmscon
+
+    # Comando padrão
+    command: >
+      bash /usr/local/share/kmscon/build-kmscon.sh
+      --log-level ${LOG_LEVEL:-INFO}
+      --jobs ${KMSCON_PARALLEL_JOBS:-auto}
+
+    # Health check
+    healthcheck:
+      test: ["CMD", "test", "-f", "/var/cache/kmscon/manifest.json"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+
+    # Recursos
+    deploy:
+      resources:
+        limits:
+          cpus: "${CPU_LIMIT:-4}"
+          memory: ${MEMORY_LIMIT:-4G}
+        reservations:
+          cpus: "1"
+          memory: 512M
+
+    # Networking (isolated)
+    networks:
+      - kmscon-build-net
+
+    # Labels para identificação
+    labels:
+      - "app=kmscon-builder"
+      - "version=${KMSCON_VERSION:-9.0.0}"
+      - "cache.enabled=true"
+      - "cache.layers=4"
+
+  # =============================================================================
+  # Serviço de Cache Inspector (opcional)
+  # =============================================================================
+  cache-inspector:
+    image: alpine:latest
+    container_name: kmscon-cache-inspector
+
+    environment:
+      - CACHE_DIR=/var/cache/kmscon
+
+    volumes:
+      # Reutiliza os mesmos volumes de cache
+      - kmscon-source-cache:/var/cache/kmscon/sources:ro
+      - kmscon-build-cache:/var/cache/kmscon/build:ro
+      - kmscon-package-cache:/var/cache/kmscon/packages:ro
+      - kmscon-manifest:/var/cache/kmscon:ro
+
+    command: >
+      sh -c "
+        echo '=== KMSCON Cache Inspector ===' &&
+        echo '' &&
+        echo 'Cache Directory Structure:' &&
+        find /var/cache/kmscon -type d -maxdepth 3 | head -20 &&
+        echo '' &&
+        echo 'Manifest:' &&
+        if [ -f /var/cache/kmscon/manifest.json ]; then
+          cat /var/cache/kmscon/manifest.json | head -50
+        else
+          echo 'No manifest found'
+        fi &&
+        echo '' &&
+        echo 'Cached Packages:' &&
+        ls -lh /var/cache/kmscon/packages/ 2>/dev/null || echo 'No packages cached' &&
+        echo '' &&
+        echo 'Cache Size:' &&
+        du -sh /var/cache/kmscon 2>/dev/null || echo 'N/A'
+      "
+
+    profiles:
+      - inspect
+
+    networks:
+      - kmscon-build-net
+
+  # =============================================================================
+  # Serviço de Cache Cleanup (opcional)
+  # =============================================================================
+  cache-cleanup:
+    image: alpine:latest
+    container_name: kmscon-cache-cleanup
+
+    environment:
+      - CACHE_DIR=/var/cache/kmscon
+      - CACHE_TTL_DAYS=${KMSCON_CACHE_TTL_DAYS:-30}
+
+    volumes:
+      - kmscon-source-cache:/var/cache/kmscon/sources
+      - kmscon-build-cache:/var/cache/kmscon/build
+      - kmscon-package-cache:/var/cache/kmscon/packages
+      - kmscon-deps-cache:/var/cache/kmscon/deps
+      - kmscon-manifest:/var/cache/kmscon
+
+    command: >
+      sh -c "
+        echo '=== KMSCON Cache Cleanup ===' &&
+        echo 'Removing files older than '$$CACHE_TTL_DAYS' days...' &&
+        find /var/cache/kmscon/packages -name '*.deb' -mtime +$$CACHE_TTL_DAYS -delete 2>/dev/null &&
+        find /var/cache/kmscon/sources -name '*.tar.xz' -mtime +$$CACHE_TTL_DAYS -delete 2>/dev/null &&
+        find /var/cache/kmscon/build -type d -mtime +$$CACHE_TTL_DAYS -exec rm -rf {} + 2>/dev/null || true &&
+        echo 'Cleanup complete' &&
+        du -sh /var/cache/kmscon
+      "
+
+    profiles:
+      - cleanup
+
+    networks:
+      - kmscon-build-net
+
+# =============================================================================
+# Volumes de Cache Multi-Camada
+# =============================================================================
+
+volumes:
+  # Layer 1: Source Cache
+  kmscon-source-cache:
+    driver: local
+    driver_opts:
+      type: none
+      o: bind
+      device: ${HOST_CACHE_DIR:-~/.cache/kmscon-build}/sources
+    labels:
+      - "cache.layer=1"
+      - "cache.type=sources"
+
+  # Layer 2: Build Cache
+  kmscon-build-cache:
+    driver: local
+    driver_opts:
+      type: none
+      o: bind
+      device: ${HOST_CACHE_DIR:-~/.cache/kmscon-build}/build
+    labels:
+      - "cache.layer=2"
+      - "cache.type=build"
+
+  # Layer 3: Package Cache
+  kmscon-package-cache:
+    driver: local
+    driver_opts:
+      type: none
+      o: bind
+      device: ${HOST_CACHE_DIR:-~/.cache/kmscon-build}/packages
+    labels:
+      - "cache.layer=3"
+      - "cache.type=packages"
+
+  # Layer 4: Dependencies Cache
+  kmscon-deps-cache:
+    driver: local
+    driver_opts:
+      type: none
+      o: bind
+      device: ${HOST_CACHE_DIR:-~/.cache/kmscon-build}/deps
+    labels:
+      - "cache.layer=4"
+      - "cache.type=deps"
+
+  # Lock directory
+  kmscon-lock:
+    driver: local
+    driver_opts:
+      type: none
+      o: bind
+      device: ${HOST_CACHE_DIR:-~/.cache/kmscon-build}/lock
+    labels:
+      - "cache.type=locks"
+
+  # Manifest directory (root cache)
+  kmscon-manifest:
+    driver: local
+    driver_opts:
+      type: none
+      o: bind
+      device: ${HOST_CACHE_DIR:-~/.cache/kmscon-build}
+    labels:
+      - "cache.type=manifest"
+
+# =============================================================================
+# Rede Isolada
+# =============================================================================
+
+networks:
+  kmscon-build-net:
+    driver: bridge
+    internal: false
+    ipam:
+      config:
+        - subnet: 172.28.0.0/16

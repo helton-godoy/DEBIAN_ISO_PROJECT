@@ -59,6 +59,7 @@ cifs-utils
 Este pacote foi **removido** no Debian Trixie pois foi descontinuado upstream no Samba 4.
 A funcionalidade de sincronização de senhas SMB/Linux agora é tratada de forma diferente
 via `libpam-winbind` e configurações no `smb.conf`:
+
 ```
 pam password change = yes
 passwd program = /usr/bin/passwd %u
@@ -70,7 +71,7 @@ passwd chat = *Enter*new*password* %n\n *Retype*new*password* %n\n *password*upd
 | `samba-common-bin`   | testparm, smbpasswd, net, pdbedit          | Diagnóstico e administração                     |
 | `samba-vfs-modules`  | vfs_acl_xattr, vfs_zfsacl, vfs_shadow_copy | **CRÍTICO** - Otimizações de performance e ACLs |
 | `samba-dsdb-modules` | Módulos de banco de dados Samba            | Suporte a AD como membro                        |
-| `libpam-smbpass`     | Sincronização senhas SMB/Linux             | **REMOVIDO** - Descontinuado no Samba 4        |
+| `libpam-smbpass`     | Sincronização senhas SMB/Linux             | **REMOVIDO** - Descontinuado no Samba 4         |
 | `cifs-utils`         | mount.cifs                                 | Montar shares remotos para migração             |
 
 **Nota sobre VFS Modules:**

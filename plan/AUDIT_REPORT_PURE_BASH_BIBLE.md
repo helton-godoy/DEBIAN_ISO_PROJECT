@@ -1,4 +1,5 @@
 # 📊 RELATÓRIO DE AUDITORIA TÉCNICA
+
 ## Script `install-system` - Análise Pure Bash Bible
 
 **Data:** 2026-01-31  
@@ -10,42 +11,46 @@
 
 ## 🎯 Sumário Executivo
 
-| Métrica | Original | Otimizado | Redução |
-|---------|----------|-----------|---------|
-| **Linhas de Código** | 668 | 695 | +4%* |
-| **Processos Externos Desnecessários** | 12 | 0 | -100% |
-| **Variáveis Não Quoteadas** | 8 | 0 | -100% |
-| **Uso de `seq`** | 4 | 0 | -100% |
-| **Uso de `awk`** | 3 | 0 | -100% |
-| **Uso de `grep`** | 1 | 0 | -100% |
-| **Falhas Strict Mode** | 3 | 0 | -100% |
-| **Erros de Sintaxe** | 2 | 0 | -100% |
-| **Funções Pure Bash** | 0 | 10 | +10 |
+| Métrica                               | Original | Otimizado | Redução |
+| ------------------------------------- | -------- | --------- | ------- |
+| **Linhas de Código**                  | 668      | 695       | +4%\*   |
+| **Processos Externos Desnecessários** | 12       | 0         | -100%   |
+| **Variáveis Não Quoteadas**           | 8        | 0         | -100%   |
+| **Uso de `seq`**                      | 4        | 0         | -100%   |
+| **Uso de `awk`**                      | 3        | 0         | -100%   |
+| **Uso de `grep`**                     | 1        | 0         | -100%   |
+| **Falhas Strict Mode**                | 3        | 0         | -100%   |
+| **Erros de Sintaxe**                  | 2        | 0         | -100%   |
+| **Funções Pure Bash**                 | 0        | 10        | +10     |
 
-*\* O aumento de linhas é devido à adição de funções utilitárias pure bash e documentação de segurança, compensado pela eliminação de processos externos.*
+_\* O aumento de linhas é devido à adição de funções utilitárias pure bash e documentação de segurança, compensado pela eliminação de processos externos._
 
 ---
 
 ## 🚨 PROBLEMAS CRÍTICOS IDENTIFICADOS
 
 ### **SC01 - Strict Mode Incompleto**
-| Campo | Valor |
-|-------|-------|
+
+| Campo          | Valor      |
+| -------------- | ---------- |
 | **Severidade** | 🔴 CRÍTICO |
-| **Linha** | 9 |
-| **Categoria** | Segurança |
+| **Linha**      | 9          |
+| **Categoria**  | Segurança  |
 
 **Código Problemático:**
+
 ```bash
 set -e
 ```
 
 **Problema:** Apenas `set -e` está definido. Faltam:
+
 - `set -u` - Variáveis não definidas não geram erro
-- `set -o pipefail` - Falhas em pipes não são detectadas  
+- `set -o pipefail` - Falhas em pipes não são detectadas
 - `shopt -s inherit_errexit` - Erros não propagam em subshells
 
 **Correção Aplicada:**
+
 ```bash
 set -euo pipefail
 shopt -s inherit_errexit 2>/dev/null || true
@@ -54,13 +59,15 @@ shopt -s inherit_errexit 2>/dev/null || true
 ---
 
 ### **SC02 - Eval Implícito via String**
-| Campo | Valor |
-|-------|-------|
-| **Severidade** | 🔴 CRÍTICO |
-| **Linha** | 641, 645 |
-| **Categoria** | Command Injection |
+
+| Campo          | Valor             |
+| -------------- | ----------------- |
+| **Severidade** | 🔴 CRÍTICO        |
+| **Linha**      | 641, 645          |
+| **Categoria**  | Command Injection |
 
 **Código Problemático:**
+
 ```bash
 if ! gum spin ... -- bash -c "${cmd}"; then
 ```
@@ -68,6 +75,7 @@ if ! gum spin ... -- bash -c "${cmd}"; then
 **Problema:** Comandos são passados como strings para `bash -c`, criando riscos de injeção se variáveis contiverem caracteres especiais (`;`, `&`, `|`, etc.).
 
 **Correção Aplicada:**
+
 ```bash
 # Usar "$@" para passar argumentos diretamente
 run_step() {
@@ -83,13 +91,15 @@ run_step() {
 ---
 
 ### **ER01 - Erro de Sintaxe em `progress_bar`**
-| Campo | Valor |
-|-------|-------|
-| **Severidade** | 🔴 CRÍTICO |
-| **Linha** | 152-153 |
-| **Categoria** | Erro de Sintaxe |
+
+| Campo          | Valor           |
+| -------------- | --------------- |
+| **Severidade** | 🔴 CRÍTICO      |
+| **Linha**      | 152-153         |
+| **Categoria**  | Erro de Sintaxe |
 
 **Código Problemático:**
+
 ```bash
 local bar_filled=$(printf '█%.0s' $(seq "1 $fill"ed))
 local bar_empty=$(printf '░%.0s' $(seq "1 $emp"ty))
@@ -98,6 +108,7 @@ local bar_empty=$(printf '░%.0s' $(seq "1 $emp"ty))
 **Problema:** `"1 $fill"ed` e `"1 $emp"ty` são strings malformadas! O comando `seq` receberá argumentos incorretos causando falha silenciosa.
 
 **Correção Aplicada:**
+
 ```bash
 # Pure bash loop (no seq)
 for ((i=0; i<filled; i++)); do
@@ -111,13 +122,15 @@ done
 ---
 
 ### **SC06 - Here-Document com Expansão de Variáveis**
-| Campo | Valor |
-|-------|-------|
-| **Severidade** | 🟠 ALTO |
-| **Linha** | 577 |
-| **Categoria** | Command Injection |
+
+| Campo          | Valor             |
+| -------------- | ----------------- |
+| **Severidade** | 🟠 ALTO           |
+| **Linha**      | 577               |
+| **Categoria**  | Command Injection |
 
 **Código Problemático:**
+
 ```bash
 chroot /mnt /bin/bash <<EOF
 echo "${ADM_USER}:${ADM_PASS}" | chpasswd
@@ -127,6 +140,7 @@ EOF
 **Problema:** Variáveis são expandidas no here-document ANTES de serem passadas para chroot, expondo senhas em potencial.
 
 **Correção Aplicada:**
+
 ```bash
 # Criar script temporário com quoting adequado
 {
@@ -140,19 +154,22 @@ EOF
 ## ⚡ ANTI-PADRÕES DE PERFORMANCE
 
 ### **PF01 - Uso de `seq` para Sequências**
-| Campo | Valor |
-|-------|-------|
-| **Severidade** | 🟠 ALTO |
-| **Linhas** | 99, 129, 152, 153 |
-| **Categoria** | Processo Externo Desnecessário |
+
+| Campo          | Valor                          |
+| -------------- | ------------------------------ |
+| **Severidade** | 🟠 ALTO                        |
+| **Linhas**     | 99, 129, 152, 153              |
+| **Categoria**  | Processo Externo Desnecessário |
 
 **Código Problemático:**
+
 ```bash
 $(seq 1 60)           # Processo externo
 $(seq "1 $fill"ed)    # Sintaxe quebrada + processo externo
 ```
 
 **Substituição Pure Bash:**
+
 ```bash
 # Brace expansion (builtin)
 {1..60}
@@ -168,13 +185,15 @@ done
 ---
 
 ### **PF02 - Uso de `awk` para Extração**
-| Campo | Valor |
-|-------|-------|
-| **Severidade** | 🟠 ALTO |
-| **Linhas** | 339, 352, 427 |
-| **Categoria** | Processo Externo Desnecessário |
+
+| Campo          | Valor                          |
+| -------------- | ------------------------------ |
+| **Severidade** | 🟠 ALTO                        |
+| **Linhas**     | 339, 352, 427                  |
+| **Categoria**  | Processo Externo Desnecessário |
 
 **Código Problemático:**
+
 ```bash
 lsblk ... | awk '{print $1" ("$2") - "$3}'
 echo "${TARGET_SELECTED}" | awk '{print $1}'
@@ -182,6 +201,7 @@ echo "$TARGET_SELECTED" | awk -F'[()]' '{print $2}'
 ```
 
 **Substituições Pure Bash:**
+
 ```bash
 # Extrair campos com read builtin
 while read -r name size model; do
@@ -201,18 +221,21 @@ between="${between%\)*}"
 ---
 
 ### **PF03 - Uso de `grep` para Filtragem**
-| Campo | Valor |
-|-------|-------|
-| **Severidade** | 🟠 ALTO |
-| **Linha** | 339 |
-| **Categoria** | Processo Externo Desnecessário |
+
+| Campo          | Valor                          |
+| -------------- | ------------------------------ |
+| **Severidade** | 🟠 ALTO                        |
+| **Linha**      | 339                            |
+| **Categoria**  | Processo Externo Desnecessário |
 
 **Código Problemático:**
+
 ```bash
 lsblk ... | grep -v "loop"
 ```
 
 **Substituição Pure Bash:**
+
 ```bash
 while read -r line; do
     [[ $line == *loop* ]] && continue
@@ -223,11 +246,12 @@ done < <(lsblk ...)
 ---
 
 ### **PF04 - Subshells Desnecessárias**
-| Campo | Valor |
-|-------|-------|
-| **Severidade** | 🟡 MÉDIO |
+
+| Campo             | Valor          |
+| ----------------- | -------------- |
+| **Severidade**    | 🟡 MÉDIO       |
 | **Várias Linhas** | 339, 347, etc. |
-| **Categoria** | Performance |
+| **Categoria**     | Performance    |
 
 **Problema:** Cada `$()` cria uma subshell. Múltiplos pipes criam múltiplos processos.
 
@@ -236,18 +260,21 @@ done < <(lsblk ...)
 ---
 
 ### **PF05 - Uso de `cat` para Redirecionamento**
-| Campo | Valor |
-|-------|-------|
-| **Severidade** | 🟡 MÉDIO |
-| **Linhas** | 512, 519, 534, 539 |
-| **Categoria** | Processo Externo |
+
+| Campo          | Valor              |
+| -------------- | ------------------ |
+| **Severidade** | 🟡 MÉDIO           |
+| **Linhas**     | 512, 519, 534, 539 |
+| **Categoria**  | Processo Externo   |
 
 **Código Problemático:**
+
 ```bash
 cat >/mnt/etc/hostname <<EOF
 ```
 
 **Substituição Pure Bash:**
+
 ```bash
 {
     echo "127.0.0.1    localhost"
@@ -260,26 +287,29 @@ cat >/mnt/etc/hostname <<EOF
 ## 📚 VIOLAÇÕES PURE BASH BIBLE
 
 ### **PB01 - Parameter Expansion Não Utilizado**
-| Técnica | Original | Otimizado |
-|---------|----------|-----------|
-| `dirname` | `dirname "$path"` | `${path%/*}` |
-| `basename` | `basename "$path"` | `${path##*/}` |
-| First field | `awk '{print $1}'` | `${var%% *}` |
+
+| Técnica        | Original                    | Otimizado                   |
+| -------------- | --------------------------- | --------------------------- |
+| `dirname`      | `dirname "$path"`           | `${path%/*}`                |
+| `basename`     | `basename "$path"`          | `${path##*/}`               |
+| First field    | `awk '{print $1}'`          | `${var%% *}`                |
 | Between delims | `awk -F'[()]' '{print $2}'` | `${var#*\(}` + `${var%\)*}` |
 
 ---
 
 ### **PB02 - Validação de Variáveis**
-| Técnica | Uso Correto |
-|---------|-------------|
-| Não vazia | `[[ -n "${var:-}" ]]` |
-| Está vazia | `[[ -z "${var:-}" ]]` |
-| Variável setada | `[[ -v var ]]` |
-| Regex match | `[[ "$var" =~ ^[0-9]+$ ]]` |
+
+| Técnica         | Uso Correto                |
+| --------------- | -------------------------- |
+| Não vazia       | `[[ -n "${var:-}" ]]`      |
+| Está vazia      | `[[ -z "${var:-}" ]]`      |
+| Variável setada | `[[ -v var ]]`             |
+| Regex match     | `[[ "$var" =~ ^[0-9]+$ ]]` |
 
 ---
 
 ### **PB03 - Strict Mode Idiomático**
+
 ```bash
 #!/usr/bin/env bash
 set -euo pipefail
@@ -289,6 +319,7 @@ shopt -s inherit_errexit 2>/dev/null || true
 ---
 
 ### **PB04 - Trap para Cleanup**
+
 ```bash
 cleanup() {
     local exit_code=$?
@@ -304,16 +335,16 @@ trap cleanup EXIT INT TERM
 
 O script otimizado inclui 10 novas funções utilitárias pure bash:
 
-| Função | Descrição | Substitui |
-|--------|-----------|-----------|
-| `trim_string()` | Remove whitespace | `sed 's/^[ \t]*//;s/[ \t]*$//'` |
-| `contains()` | Verifica substring | `grep -q` ou `[[ $var == *substr* ]]` |
-| `starts_with()` | Verifica prefixo | `[[ $var == prefix* ]]` |
-| `ends_with()` | Verifica sufixo | `[[ $var == *suffix ]]` |
-| `first_field()` | Extrai primeiro campo | `awk '{print $1}'` |
-| `extract_between_parens()` | Extrai entre () | `awk -F'[()]' '{print $2}'` |
-| `repeat_char()` | Repete caracteres | `seq` + `printf` |
-| `h_line()` | Gera linha horizontal | `seq` + `printf` |
+| Função                     | Descrição             | Substitui                             |
+| -------------------------- | --------------------- | ------------------------------------- |
+| `trim_string()`            | Remove whitespace     | `sed 's/^[ \t]*//;s/[ \t]*$//'`       |
+| `contains()`               | Verifica substring    | `grep -q` ou `[[ $var == *substr* ]]` |
+| `starts_with()`            | Verifica prefixo      | `[[ $var == prefix* ]]`               |
+| `ends_with()`              | Verifica sufixo       | `[[ $var == *suffix ]]`               |
+| `first_field()`            | Extrai primeiro campo | `awk '{print $1}'`                    |
+| `extract_between_parens()` | Extrai entre ()       | `awk -F'[()]' '{print $2}'`           |
+| `repeat_char()`            | Repete caracteres     | `seq` + `printf`                      |
+| `h_line()`                 | Gera linha horizontal | `seq` + `printf`                      |
 
 ---
 
@@ -322,6 +353,7 @@ O script otimizado inclui 10 novas funções utilitárias pure bash:
 ### **Verificações Adicionadas:**
 
 1. **Verificação de Root:**
+
 ```bash
 if [[ $EUID -ne 0 ]]; then
     printf '%s\n' "Erro: Este script deve ser executado como root" >&2
@@ -330,6 +362,7 @@ fi
 ```
 
 2. **Verificação de Dependências:**
+
 ```bash
 local deps=("gum" "lsblk" "sgdisk" "zpool")
 for dep in "${deps[@]}"; do
@@ -341,6 +374,7 @@ done
 ```
 
 3. **Verificação de Versão Bash:**
+
 ```bash
 [[ ${BASH_VERSINFO[0]} -ge 4 ]] || {
     printf '%s\n' "Erro: Bash 4+ é necessário" >&2
@@ -349,6 +383,7 @@ done
 ```
 
 4. **Cleanup Automático:**
+
 ```bash
 cleanup() {
     local exit_code=$?
@@ -362,6 +397,7 @@ trap cleanup_interrupted INT TERM
 ```
 
 5. **Senha em Array (Proteção /proc):**
+
 ```bash
 local -a ADM_PASS_ARRAY=("$pass1")
 # Uso posterior
@@ -376,43 +412,43 @@ ADM_PASS_ARRAY=()
 
 ### **Processos Externos Eliminados:**
 
-| Processo | Quantidade Original | Quantidade Otimizada | Redução |
-|----------|---------------------|----------------------|---------|
-| `seq` | 4 | 0 | 100% |
-| `awk` | 3 | 0 | 100% |
-| `grep` | 1 | 0 | 100% |
-| `cat` | 4 | 0 | 100% |
-| `dirname` | 0 | 0 | - |
-| `basename` | 0 | 0 | - |
-| **TOTAL** | **12** | **0** | **100%** |
+| Processo   | Quantidade Original | Quantidade Otimizada | Redução  |
+| ---------- | ------------------- | -------------------- | -------- |
+| `seq`      | 4                   | 0                    | 100%     |
+| `awk`      | 3                   | 0                    | 100%     |
+| `grep`     | 1                   | 0                    | 100%     |
+| `cat`      | 4                   | 0                    | 100%     |
+| `dirname`  | 0                   | 0                    | -        |
+| `basename` | 0                   | 0                    | -        |
+| **TOTAL**  | **12**              | **0**                | **100%** |
 
 ### **Complexidade Ciclomática:**
 
-| Métrica | Original | Otimizado |
-|---------|----------|-----------|
-| Número de Funções | 23 | 33 (+10 utilitárias) |
-| Linhas por Função (média) | 29 | 21 |
-| Nesting Máximo | 4 | 3 |
+| Métrica                   | Original | Otimizado            |
+| ------------------------- | -------- | -------------------- |
+| Número de Funções         | 23       | 33 (+10 utilitárias) |
+| Linhas por Função (média) | 29       | 21                   |
+| Nesting Máximo            | 4        | 3                    |
 
 ---
 
 ## ✅ CHECKLIST DE CONFORMIDADE PURE BASH BIBLE
 
-| Princípio | Status |
-|-----------|--------|
-| ✅ `set -euo pipefail` | Implementado |
-| ✅ `shopt -s inherit_errexit` | Implementado |
-| ✅ Eliminar `seq` | Substituído por loops C-style |
-| ✅ Eliminar `awk` | Substituído por parameter expansion |
-| ✅ Eliminar `grep` | Substituído por `[[ ]]` pattern matching |
-| ✅ Eliminar `cat` | Substituído por redirection `>` |
-| ✅ Eliminar `sed` | Não havia uso significativo |
-| ✅ Parameter expansion para paths | `${var%/*}`, `${var##*/}` |
-| ✅ Trap para cleanup | Implementado |
-| ✅ Variáveis readonly | Onde aplicável |
-| ✅ Arrays para dados sensíveis | Implementado |
-| ✅ Quoting consistente | Todas as variáveis |
-| ✅ Verificação de Bash 4+ | Implementado |
+| Princípio                         | Status                                   |
+| --------------------------------- | ---------------------------------------- |
+| ✅ `set -euo pipefail`            | Implementado                             |
+| ✅ `shopt -s inherit_errexit`     | Implementado                             |
+| ✅ Eliminar `seq`                 | Substituído por loops C-style            |
+| ✅ Eliminar `awk`                 | Substituído por parameter expansion      |
+| ✅ Eliminar `grep`                | Substituído por `[[ ]]` pattern matching |
+| ✅ Eliminar `cat`                 | Substituído por redirection `>`          |
+| ✅ Eliminar `sed`                 | Não havia uso significativo              |
+| ✅ Parameter expansion para paths | `${var%/*}`, `${var##*/}`                |
+| ✅ Trap para cleanup              | Implementado                             |
+| ✅ Variáveis readonly             | Onde aplicável                           |
+| ✅ Arrays para dados sensíveis    | Implementado                             |
+| ✅ Quoting consistente            | Todas as variáveis                       |
+| ✅ Verificação de Bash 4+         | Implementado                             |
 
 ---
 
@@ -437,14 +473,14 @@ ADM_PASS_ARRAY=()
 
 ## 📁 Arquivos Gerados
 
-| Arquivo | Descrição |
-|---------|-----------|
-| `install-system` | Script original (backup) |
-| `install-system-optimized` | Script refatorado com pure-bash-bible |
-| `AUDIT_REPORT_PURE_BASH_BIBLE.md` | Este relatório |
+| Arquivo                           | Descrição                             |
+| --------------------------------- | ------------------------------------- |
+| `install-system`                  | Script original (backup)              |
+| `install-system-optimized`        | Script refatorado com pure-bash-bible |
+| `AUDIT_REPORT_PURE_BASH_BIBLE.md` | Este relatório                        |
 
 ---
 
 **Fim do Relatório**
 
-*Auditoria realizada seguindo princípios do [Pure Bash Bible](https://github.com/dylanaraps/pure-bash-bible)*
+_Auditoria realizada seguindo princípios do [Pure Bash Bible](https://github.com/dylanaraps/pure-bash-bible)_

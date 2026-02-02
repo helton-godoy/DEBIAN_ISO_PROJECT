@@ -126,6 +126,17 @@ ncdu
 tree
 pv
 
+# === Cloud-Init & Guest Agent (VM Access & Automation) =======================
+cloud-init
+cloud-guest-utils
+qemu-guest-agent
+
+# === JSON Processing (para cloud-init e diagnóstico) =========================
+jq
+
+# === VM Debugging Tools =======================================================
+virt-what
+
 # === Debian Tools ============================================================
 debootstrap
 dpkg-dev
@@ -152,10 +163,10 @@ console-setup
 keyboard-configuration
 strace
 ltrace
+ccache
 
 # === Utilitários Adicionais ==================================================
 bc
-jq
 unzip
 xz-utils
 bzip2

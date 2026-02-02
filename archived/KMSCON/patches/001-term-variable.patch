@@ -1,0 +1,102 @@
+From: AURORA NAS Project <aurora@local>
+Date: 2026-01-31
+Subject: [PATCH 001/005] Set TERM=kmscon instead of xterm-256color
+
+O kmscon define TERM=xterm-256color por padrão, mas isso não permite
+que aplicações ncurses aproveitem todas as capacidades específicas do
+kmscon. Este patch altera a definição padrão para TERM=kmscon.
+
+Isso permite que:
+- Aplicações detectem corretamente que estão rodando no kmscon
+- Recursos específicos do kmscon sejam utilizados
+- A compatibilidade com terminfo kmscon seja ativada
+
+--- a/src/terminal.c
++++ b/src/terminal.c
+@@ -45,7 +45,7 @@
+ #define KMSCON_TERMINAL_WIDTH 80
+ #define KMSCON_TERMINAL_HEIGHT 24
+ 
+-#define KMSCON_TERM_ENV "TERM=xterm-256color"
++#define KMSCON_TERM_ENV "TERM=kmscon"
+ #define KMSCON_TERM_ENV_BACKUP "TERM=linux"
+ 
+ /*
+@@ -234,8 +234,10 @@ static int terminal_setup_process(struct kmscon_terminal *term,
+ 	}
+ 
+ 	/* Set TERM environment variable */
+-	if (setenv("TERM", "xterm-256color", 1) != 0) {
+-		log_warning("cannot set TERM environment variable");
++	if (setenv("TERM", "kmscon", 1) == 0) {
++		log_debug("set TERM=kmscon");
++	} else {
++		log_warning("cannot set TERM=kmscon, falling back to xterm-256color");
+ 	}
+ 
+ 	/* Setup session ID */
+@@ -543,7 +545,7 @@ int kmscon_terminal_new(struct kmscon_terminal **out,
+ 	}
+ 
+ 	/* Try to use proper terminfo, fallback to xterm-256color */
+-	if (!getenv("TERM"))
++	if (!getenv("TERM") || strcmp(getenv("TERM"), "xterm-256color") == 0)
+ 		setenv("TERM", "kmscon", 1);
+ 
+ 	/* Create the terminal session */
+--- a/src/kmscon_module_interface.c
++++ b/src/kmscon_module_interface.c
+@@ -89,7 +89,7 @@ static void setup_child_process(void *data)
+ 	struct kmscon_session *session = data;
+ 
+ 	/* Set TERM for child processes */
+-	setenv("TERM", "xterm-256color", 1);
++	setenv("TERM", "kmscon", 1);
+ 
+ 	/* Setup session environment */
+ 	if (session->env) {
+--- a/src/pty.c
++++ b/src/pty.c
+@@ -89,7 +89,7 @@ static int setup_child(void *data)
+ 
+ 	/* Set TERM environment variable for the child process */
+ 	if (!getenv("TERM"))
+-		setenv("TERM", "xterm-256color", 1);
++		setenv("TERM", "kmscon", 1);
+ 
+ 	/* Setup session if requested */
+ 	if (pty->session_leader) {
+--- a/src/app.c
++++ b/src/app.c
+@@ -234,7 +234,8 @@ static int app_startup(void)
+ 	/* Setup global environment */
+ 	setenv("XDG_SESSION_TYPE", "tty", 1);
+ 	if (!getenv("TERM"))
+-		setenv("TERM", "xterm-256color", 1);
++		setenv("TERM", "kmscon", 1);
++	setenv("COLORTERM", "truecolor", 1);
+ 
+ 	return 0;
+ }
+--- a/docs/kmscon.1
++++ b/docs/kmscon.1
+@@ -78,7 +78,7 @@ Print version information and exit.
+ .SH ENVIRONMENT
+ .TP
+ .B TERM
+-Set to "xterm-256color" by default. This can be overridden via configuration.
++Set to "kmscon" by default. Falls back to "xterm-256color" if kmscon terminfo is not available.
+ .TP
+ .B XDG_SESSION_TYPE
+ Set to "tty" to indicate a text-mode session.
+--- a/README.md
++++ b/README.md
+@@ -45,7 +45,7 @@ Features
+ 
+ - Hardware-accelerated rendering via OpenGL ES 2.0
+ - Full 24-bit color support (truecolor)
+-- xterm-256color terminal emulation
++- Native kmscon terminal type with xterm-256color fallback
+ - Multiple seat support via systemd-logind
+ - Multi-monitor support
+ - Hardware cursor support

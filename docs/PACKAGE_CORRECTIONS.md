@@ -7,6 +7,7 @@
 ## Resumo das Correções
 
 ### 1. Remover Duplicado
+
 - **Linha 147:** Remover `pv` (já existe na linha 115)
 
 ### 2. Adicionar Pacotes CRÍTICOS
@@ -261,13 +262,13 @@ debian-security-support
 +# === RPC Support (CRÍTICO para NFS em Debian Trixie) =========================
 +libtirpc3
 +rpcbind
- 
+
  # === NFS v4 ACLs & Compatibilidade FreeNAS ===================================
  nfs4-acl-tools
 @@ -75,6 +79,10 @@ ldap-utils
  ldb-tools
  tdb-tools
- 
+
 +# === Kerberos Keyring Persistence (RECOMENDADO para AD) ======================
 +keyutils
 +libnss-systemd
@@ -278,7 +279,7 @@ debian-security-support
 @@ -83,6 +91,10 @@ ethtool
  irqbalance
  sysfsutils
- 
+
 +# === Database Tools (RECOMENDADO para debug Samba) ===========================
 +db-util
 +
@@ -287,7 +288,7 @@ debian-security-support
  wpasupplicant
 @@ -140,9 +152,8 @@ strace
  ltrace
- 
+
  # === Utilitários Adicionais ==================================================
  bc
  jq
@@ -298,7 +299,7 @@ debian-security-support
 @@ -156,6 +167,10 @@ logrotate
  # NOTA: plocate substitui mlocate (Debian Trixie)
  plocate
- 
+
 +# === Entropia para VMs (RECOMENDADO para Kerberos/TLS) =======================
 +haveged
 +
@@ -346,4 +347,4 @@ haveged --version           # Deve mostrar versão
 
 ---
 
-*Arquivo gerado como parte da Revisão Técnica de Pacotes AURORA NAS*
+_Arquivo gerado como parte da Revisão Técnica de Pacotes AURORA NAS_

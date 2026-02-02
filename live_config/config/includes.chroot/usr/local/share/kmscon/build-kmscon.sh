@@ -35,16 +35,17 @@ readonly EXIT_INSTALL_FAILED=70
 readonly EXIT_SYSTEMD_FAILED=71
 
 # Versões
-readonly KMSCON_VERSION="${KMSCON_VERSION:-9.0.0}"
-readonly LIBTSM_VERSION="${LIBTSM_VERSION:-4.0.2}"
+readonly KMSCON_VERSION="${KMSCON_VERSION:-9.3.0}"
+readonly LIBTSM_VERSION="${LIBTSM_VERSION:-4.4.2}"
 
 # URLs da API GitHub para verificação de releases
 readonly KMSCON_API_URL="${KMSCON_API_URL:-https://api.github.com/repos/kmscon/kmscon/releases/latest}"
 readonly LIBTSM_API_URL="${LIBTSM_API_URL:-https://api.github.com/repos/kmscon/libtsm/releases/latest}"
 
 # URLs de download (serão atualizadas dinamicamente se CHECK_LATEST=1)
-readonly KMSCON_URL="${KMSCON_URL:-https://api.github.com/repos/kmscon/kmscon/tarball/v${KMSCON_VERSION}}"
-readonly LIBTSM_URL="${LIBTSM_URL:-https://api.github.com/repos/kmscon/libtsm/tarball/v${LIBTSM_VERSION}}"
+# Fallback para o arquivo gerado automaticamente pelo GitHub se a API falhar ou não for usada
+readonly KMSCON_URL="${KMSCON_URL:-https://github.com/kmscon/kmscon/archive/v${KMSCON_VERSION}.tar.gz}"
+readonly LIBTSM_URL="${LIBTSM_URL:-https://github.com/kmscon/libtsm/archive/v${LIBTSM_VERSION}.tar.gz}"
 
 # Opções de download idempotente
 readonly CHECK_LATEST="${CHECK_LATEST:-1}"
@@ -61,6 +62,7 @@ readonly PACKAGE_ROOT="${BUILD_ROOT}/package/kmscon-${KMSCON_VERSION}"
 
 # Opções de build
 PARALLEL_JOBS="${PARALLEL_JOBS:-$(nproc 2>/dev/null || echo 4)}"
+
 readonly CHECKSUM_VERIFY="${CHECKSUM_VERIFY:-1}"
 KEEP_BUILD="${KEEP_BUILD:-0}"
 
@@ -77,7 +79,6 @@ readonly REQUIRED_FEATURES=(
 	"video_drm3d"
 	"renderer_gltex"
 	"font_pango"
-	"libinput"
 	"multi_seat"
 	"session_terminal"
 )
@@ -121,19 +122,19 @@ fi
 
 init_logging() {
 	local log_dir
-	log_dir="$(dirname "$LOG_FILE")"
+	log_dir="$(dirname "${LOG_FILE}")"
 
-	if [[ ! -d "$log_dir" ]]; then
-		mkdir -p "$log_dir" 2>/dev/null || {
-			printf '%s\n' "Aviso: Não foi possível criar diretório de log: $log_dir" >&2
+	if [[ ! -d ${log_dir} ]]; then
+		mkdir -p "${log_dir}" 2>/dev/null || {
+			printf '%s\n' "Aviso: Não foi possível criar diretório de log: ${log_dir}" >&2
 		}
 	fi
 
 	# Limpa log anterior
-	: >"$LOG_FILE" 2>/dev/null || true
+	: >"${LOG_FILE}" 2>/dev/null || true
 
 	log_info "Iniciando script de build do KMSCON v${SCRIPT_VERSION}"
-	log_info "Log file: $LOG_FILE"
+	log_info "Log file: ${LOG_FILE}"
 }
 
 _log() {
@@ -143,24 +144,24 @@ _log() {
 	timestamp="$(date '+%Y-%m-%d %H:%M:%S')"
 
 	# Escreve no arquivo de log
-	printf '%s\n' "[${timestamp}] [${level}] ${message}" >>"$LOG_FILE" 2>/dev/null || true
+	printf '%s\n' "[${timestamp}] [${level}] ${message}" >>"${LOG_FILE}" 2>/dev/null || true
 
 	# Escreve no stderr com cores (se TTY)
 	local color=''
-	case "$level" in
-	DEBUG) color="$COLOR_CYAN" ;;
-	INFO) color="$COLOR_GREEN" ;;
-	WARN) color="$COLOR_YELLOW" ;;
-	ERROR) color="$COLOR_RED" ;;
-	FATAL) color="$COLOR_RED$COLOR_BOLD" ;;
+	case "${level}" in
+	DEBUG) color="${COLOR_CYAN}" ;;
+	INFO) color="${COLOR_GREEN}" ;;
+	WARN) color="${COLOR_YELLOW}" ;;
+	ERROR) color="${COLOR_RED}" ;;
+	FATAL) color="${COLOR_RED}${COLOR_BOLD}" ;;
 	esac
 
-	printf "%b[%s]%b %s\n" "$color" "$level" "$COLOR_RESET" "$message" >&2
+	printf "%b[%s]%b %s\n" "${color}" "${level}" "${COLOR_RESET}" "${message}" >&2
 }
 
-log_debug() { [[ "$LOG_LEVEL" =~ ^(DEBUG)$ ]] && _log "DEBUG" "$1"; }
-log_info() { [[ "$LOG_LEVEL" =~ ^(DEBUG|INFO)$ ]] && _log "INFO" "$1"; }
-log_warn() { [[ "$LOG_LEVEL" =~ ^(DEBUG|INFO|WARN)$ ]] && _log "WARN" "$1"; }
+log_debug() { [[ ${LOG_LEVEL} =~ ^(DEBUG)$ ]] && _log "DEBUG" "$1"; }
+log_info() { [[ ${LOG_LEVEL} =~ ^(DEBUG|INFO)$ ]] && _log "INFO" "$1"; }
+log_warn() { [[ ${LOG_LEVEL} =~ ^(DEBUG|INFO|WARN)$ ]] && _log "WARN" "$1"; }
 log_error() { _log "ERROR" "$1"; }
 log_fatal() { _log "FATAL" "$1"; }
 
@@ -172,21 +173,21 @@ cleanup() {
 	local exit_code=$?
 
 	# Preserva o código de erro original antes de qualquer operação
-	local original_exit=$exit_code
+	local original_exit=${exit_code}
 
-	if [[ $original_exit -ne 0 ]]; then
-		log_error "Build falhou com código de saída: $original_exit"
+	if [[ ${original_exit} -ne 0 ]]; then
+		log_error "Build falhou com código de saída: ${original_exit}"
 
-		if [[ "${KEEP_BUILD:-0}" -eq 0 ]]; then
+		if [[ ${KEEP_BUILD:-0} -eq 0 ]]; then
 			log_info "Limpando diretório de build..."
-			rm -rf "$BUILD_ROOT" || true
+			rm -rf "${BUILD_ROOT}" || true
 		else
-			log_info "Mantendo diretório de build em: $BUILD_ROOT"
+			log_info "Mantendo diretório de build em: ${BUILD_ROOT}"
 		fi
 	fi
 
 	# Retorna o código de erro original
-	exit $original_exit
+	exit "${original_exit}"
 }
 
 trap cleanup EXIT INT TERM
@@ -196,17 +197,17 @@ version_gte() {
 	local current="$1"
 	local required="$2"
 
-	if [[ "$current" == "$required" ]]; then
+	if [[ ${current} == "${required}" ]]; then
 		return 0
 	fi
 
 	local IFS=.
-	local -a current_parts=($current)
-	local -a required_parts=($required)
+	local -a current_parts=(${current})
+	local -a required_parts=(${required})
 
 	for ((i = 0; i < ${#required_parts[@]}; i++)); do
-		local c="${current_parts[$i]:-0}"
-		local r="${required_parts[$i]:-0}"
+		local c="${current_parts[${i}]:-0}"
+		local r="${required_parts[${i}]:-0}"
 
 		if ((c > r)); then
 			return 0
@@ -223,7 +224,7 @@ get_version() {
 	local cmd="$1"
 	local version_flag="${2:---version}"
 
-	"$cmd" $version_flag 2>&1 | head -1 | grep -oE '[0-9]+\.[0-9]+(\.[0-9]+)?' | head -1
+	"${cmd}" "${version_flag}" 2>&1 | head -1 | grep -oE '[0-9]+\.[0-9]+(\.[0-9]+)?' | head -1
 }
 
 # =============================================================================
@@ -238,56 +239,63 @@ check_latest_version() {
 	local api_url="$2"
 	local timeout="${3:-30}"
 
-	log_debug "Verificando última versão de $project via API GitHub..."
-	log_debug "API URL: $api_url"
+	log_debug "Verificando última versão do ${project} via API GitHub..."
+	log_debug "API URL: ${api_url}"
 
 	local api_response
 	local curl_exit_code
 
 	# Faz a requisição à API com timeout e retry implícito do curl
 	api_response=$(curl -fsSL \
-		--max-time "$timeout" \
+		--max-time "${timeout}" \
 		--retry 2 \
 		--retry-delay 3 \
 		-H "Accept: application/vnd.github.v3+json" \
 		-H "User-Agent: KMSCON-Build-Script" \
-		"$api_url" 2>&1) || {
+		"${api_url}" 2>&1) || {
 		curl_exit_code=$?
 
 		# Verificar se é rate limit (HTTP 403/429)
-		if [[ "$api_response" =~ "403" ]] || [[ "$api_response" =~ "429" ]]; then
-			log_warn "GitHub API rate limit atingido para $project"
+		if [[ ${api_response} =~ "403" ]] || [[ ${api_response} =~ "429" ]]; then
+			log_warn "GitHub API rate limit atingido para ${project}"
 			log_info "Usando versão padrão configurada"
 			return 1 # Retorna erro para usar versão padrão
 		fi
 
-		log_warn "Falha ao consultar API GitHub para $project (exit: $curl_exit_code)"
-		log_warn "Resposta: $api_response"
+		log_warn "Falha ao consultar API GitHub para ${project} (exit: ${curl_exit_code})"
+		log_warn "Resposta: ${api_response}"
 		return 1
 	}
 
-	# Extrai informações da API
+	# Extrai informações da API usando sed para maior portabilidade
 	local tag_name
 	local tarball_url
 
-	tag_name=$(echo "$api_response" | grep -oP '"tag_name":\s*"\K[^"]+' 2>/dev/null || echo "")
-	tarball_url=$(echo "$api_response" | grep -oP '"tarball_url":\s*"\K[^"]+' 2>/dev/null || echo "")
+	# Extrai tag_name usando sed (busca "tag_name": "vX.Y.Z")
+	tag_name=$(echo "${api_response}" | sed -n 's/.*"tag_name":[[:space:]]*"\([^"]*\)".*/\1/p' | head -n1)
 
-	if [[ -z "$tag_name" ]]; then
-		log_warn "Não foi possível extrair tag_name da API para $project"
+	# Extrai tarball_url ou constrói baseado na tag se não encontrado explicitamente no topo
+	tarball_url=$(echo "${api_response}" | sed -n 's/.*"tarball_url":[[:space:]]*"\([^"]*\)".*/\1/p' | head -n1)
+
+	if [[ -z ${tag_name} ]]; then
+		log_warn "Não foi possível extrair tag_name da API para ${project}"
 		return 1
 	fi
 
 	# Remove prefixo 'v' da versão se presente
 	local version="${tag_name#v}"
 
-	log_info "Última versão de $project: $tag_name (v$version)"
-	log_info "Download URL (API): $tarball_url"
+	# Se tarball_url estiver vazia, constrói uma URL padrão do GitHub Release
+	if [[ -z ${tarball_url} ]]; then
+		tarball_url="https://api.github.com/repos/kmscon/${project}/tarball/${tag_name}"
+	fi
+
+	log_info "Última versão do ${project}: ${tag_name} (v${version})"
+	log_info "Download URL (API): ${tarball_url}"
 
 	# Exporta variáveis para o caller
-	# Usar tarball_url da API como fonte principal (sempre disponível)
-	echo "LATEST_VERSION='$version'"
-	echo "LATEST_TAG='$tag_name'"
+	echo "LATEST_VERSION='${version}'"
+	echo "LATEST_TAG='${tag_name}'"
 	echo "LATEST_URL='${tarball_url}'"
 	echo "TARBALL_URL='${tarball_url}'"
 
@@ -307,14 +315,14 @@ compare_semantic_versions() {
 
 	# Converte para arrays
 	local IFS='.'
-	local -a v1_parts=($v1)
-	local -a v2_parts=($v2)
+	local -a v1_parts=(${v1})
+	local -a v2_parts=(${v2})
 
 	local max_len=$((${#v1_parts[@]} > ${#v2_parts[@]} ? ${#v1_parts[@]} : ${#v2_parts[@]}))
 
 	for ((i = 0; i < max_len; i++)); do
-		local p1="${v1_parts[$i]:-0}"
-		local p2="${v2_parts[$i]:-0}"
+		local p1="${v1_parts[${i}]:-0}"
+		local p2="${v2_parts[${i}]:-0}"
 
 		# Remove sufixos como '-rc1', '-beta', etc. para comparação numérica
 		p1="${p1%%-*}"
@@ -342,30 +350,30 @@ validate_url() {
 	local url="$1"
 	local timeout="${2:-10}"
 
-	log_debug "Validando URL: $url"
+	log_debug "Validando URL: ${url}"
 
 	local http_code
 	http_code=$(curl -o /dev/null -fsSL \
-		--max-time "$timeout" \
+		--max-time "${timeout}" \
 		--retry 2 \
 		--retry-delay 2 \
 		-w "%{http_code}" \
-		-I "$url" 2>&1) || {
-		log_warn "URL não acessível: $url"
+		-I "${url}" 2>&1) || {
+		log_warn "URL não acessível: ${url}"
 		return 1
 	}
 
 	# Verificar rate limiting (403/429)
-	if [[ "$http_code" == "403" ]] || [[ "$http_code" == "429" ]]; then
-		log_warn "Rate limit detectado (HTTP $http_code): $url"
+	if [[ ${http_code} == "403" ]] || [[ ${http_code} == "429" ]]; then
+		log_warn "Rate limit detectado (HTTP ${http_code}): ${url}"
 		return 2 # Código especial para rate limit
 	fi
 
-	if [[ "$http_code" =~ ^(200|301|302|307|308)$ ]]; then
-		log_debug "URL válida (HTTP $http_code): $url"
+	if [[ ${http_code} =~ ^(200|301|302|307|308)$ ]]; then
+		log_debug "URL válida (HTTP ${http_code}): ${url}"
 		return 0
 	else
-		log_warn "URL retornou HTTP $http_code: $url"
+		log_warn "URL retornou HTTP ${http_code}: ${url}"
 		return 1
 	fi
 }
@@ -375,37 +383,37 @@ validate_url() {
 download_with_retry() {
 	local url="$1"
 	local output_file="$2"
-	local max_retries="${3:-$DOWNLOAD_RETRY_COUNT}"
-	local base_delay="${4:-$DOWNLOAD_RETRY_DELAY}"
+	local max_retries="${3:-${DOWNLOAD_RETRY_COUNT}}"
+	local base_delay="${4:-${DOWNLOAD_RETRY_DELAY}}"
 
 	local attempt=1
-	local delay=$base_delay
+	local delay=${base_delay}
 
-	while [[ $attempt -le $max_retries ]]; do
-		log_info "Download tentativa $attempt/$max_retries: $url"
+	while [[ ${attempt} -le ${max_retries} ]]; do
+		log_info "Download tentativa ${attempt}/${max_retries}: ${url}"
 
 		if curl -fsSL \
 			--max-time 120 \
 			--retry 0 \
-			-o "$output_file.tmp" \
-			"$url" 2>&1 | tee -a "$LOG_FILE"; then
+			-o "${output_file}.tmp" \
+			"${url}" 2>&1 | tee -a "${LOG_FILE}"; then
 
 			# Verifica se arquivo foi baixado e não está vazio
-			if [[ -s "$output_file.tmp" ]]; then
-				mv "$output_file.tmp" "$output_file"
-				log_info "Download concluído: $output_file"
+			if [[ -s "${output_file}.tmp" ]]; then
+				mv "${output_file}.tmp" "${output_file}"
+				log_info "Download concluído: ${output_file}"
 				return 0
 			else
 				log_warn "Arquivo baixado está vazio"
-				rm -f "$output_file.tmp"
+				rm -f "${output_file}.tmp"
 			fi
 		fi
 
-		log_warn "Download falhou na tentativa $attempt"
+		log_warn "Download falhou na tentativa ${attempt}"
 
-		if [[ $attempt -lt $max_retries ]]; then
+		if [[ ${attempt} -lt ${max_retries} ]]; then
 			log_info "Aguardando ${delay}s antes de retry..."
-			sleep $delay
+			sleep "${delay}"
 			# Backoff exponencial: 5s, 10s, 20s
 			delay=$((delay * 2))
 		fi
@@ -413,8 +421,8 @@ download_with_retry() {
 		((attempt++))
 	done
 
-	log_error "Download falhou após $max_retries tentativas: $url"
-	rm -f "$output_file.tmp"
+	log_error "Download falhou após ${max_retries} tentativas: ${url}"
+	rm -f "${output_file}.tmp"
 	return 1
 }
 
@@ -422,8 +430,8 @@ download_with_retry() {
 # Uso: get_cached_version "$cache_file"
 get_cached_version() {
 	local cache_file="$1"
-	if [[ -f "$cache_file" ]]; then
-		cat "$cache_file" 2>/dev/null || echo ""
+	if [[ -f ${cache_file} ]]; then
+		cat "${cache_file}" 2>/dev/null || echo ""
 	else
 		echo ""
 	fi
@@ -435,10 +443,10 @@ save_cached_version() {
 	local cache_file="$1"
 	local version="$2"
 	local cache_dir
-	cache_dir="$(dirname "$cache_file")"
+	cache_dir="$(dirname "${cache_file}")"
 
-	mkdir -p "$cache_dir" 2>/dev/null || true
-	echo "$version" >"$cache_file" 2>/dev/null || true
+	mkdir -p "${cache_dir}" 2>/dev/null || true
+	echo "${version}" >"${cache_file}" 2>/dev/null || true
 }
 
 # Barra de progresso simples
@@ -453,7 +461,7 @@ progress() {
 	printf "\r[" >&2
 	for ((i = 0; i < filled; i++)); do printf "=" >&2; done
 	for ((i = filled; i < width; i++)); do printf " " >&2; done
-	printf "] %3d%%" "$percent" >&2
+	printf "] %3d%%" "${percent}" >&2
 }
 
 # =============================================================================
@@ -464,19 +472,19 @@ check_environment() {
 	log_info "=== Fase 1: Verificação de Ambiente ==="
 
 	# Verifica se está rodando como root
-	if [[ $EUID -ne 0 ]]; then
+	if [[ ${EUID} -ne 0 ]]; then
 		log_fatal "Este script deve ser executado como root"
-		return $EXIT_NOT_ROOT
+		return "${EXIT_NOT_ROOT}"
 	fi
 	log_debug "Executando como root: OK"
 
 	# Verifica versão do Bash
 	local bash_version="${BASH_VERSION%%.*}"
 	if ((bash_version < 4)); then
-		log_fatal "Bash 4.0+ é necessário (encontrado: $BASH_VERSION)"
-		return $EXIT_BASH_OLD
+		log_fatal "Bash 4.0+ é necessário (encontrado: ${BASH_VERSION})"
+		return "${EXIT_BASH_OLD}"
 	fi
-	log_debug "Bash version: $BASH_VERSION (OK)"
+	log_debug "Bash version: ${BASH_VERSION} (OK)"
 
 	# Verifica se está em ambiente chroot
 	if [[ -f /proc/1/root/. ]] && [[ /proc/1/root/. -ef / ]]; then
@@ -486,28 +494,28 @@ check_environment() {
 	fi
 
 	# Cria diretórios necessários
-	mkdir -p "$BUILD_ROOT" "$CACHE_DIR" "$OUTPUT_DIR" || {
+	mkdir -p "${BUILD_ROOT}" "${CACHE_DIR}" "${OUTPUT_DIR}" || {
 		log_fatal "Falha ao criar diretórios de build"
-		return $EXIT_ERROR
+		return "${EXIT_ERROR}"
 	}
 
 	# Definir permissões seguras para diretórios de build
-	chmod 755 "$BUILD_ROOT" || {
+	chmod 755 "${BUILD_ROOT}" || {
 		log_fatal "Falha ao definir permissões do diretório BUILD_ROOT"
-		return $EXIT_ERROR
+		return "${EXIT_ERROR}"
 	}
-	chmod 755 "$CACHE_DIR" || {
+	chmod 755 "${CACHE_DIR}" || {
 		log_fatal "Falha ao definir permissões do diretório CACHE_DIR"
-		return $EXIT_ERROR
+		return "${EXIT_ERROR}"
 	}
-	chmod 755 "$OUTPUT_DIR" || {
+	chmod 755 "${OUTPUT_DIR}" || {
 		log_fatal "Falha ao definir permissões do diretório OUTPUT_DIR"
-		return $EXIT_ERROR
+		return "${EXIT_ERROR}"
 	}
 
 	BUILD_STATE[env_checked]=1
 	log_info "Ambiente verificado com sucesso"
-	return $EXIT_SUCCESS
+	return "${EXIT_SUCCESS}"
 }
 
 # =============================================================================
@@ -526,6 +534,7 @@ check_dependencies() {
 		"curl:0"
 		"tar:0"
 		"patch:0"
+		"git:0"
 	)
 
 	local -a missing=()
@@ -535,13 +544,13 @@ check_dependencies() {
 		local cmd="${cmd_spec%%:*}"
 		local min_version="${cmd_spec##*:}"
 
-		if ! command -v "$cmd" &>/dev/null; then
-			missing+=("$cmd")
-		elif [[ "$min_version" != "0" ]]; then
+		if ! command -v "${cmd}" &>/dev/null; then
+			missing+=("${cmd}")
+		elif [[ ${min_version} != "0" ]]; then
 			local version
-			version=$(get_version "$cmd" 2>/dev/null || echo "0")
-			if ! version_gte "$version" "$min_version"; then
-				version_issues+=("$cmd: $version < $min_version")
+			version=$(get_version "${cmd}" 2>/dev/null || echo "0")
+			if ! version_gte "${version}" "${min_version}"; then
+				version_issues+=("${cmd}: ${version} < ${min_version}")
 			fi
 		fi
 	done
@@ -557,29 +566,29 @@ check_dependencies() {
 			missing=()
 			for cmd_spec in "${required_cmds[@]}"; do
 				local cmd="${cmd_spec%%:*}"
-				if ! command -v "$cmd" &>/dev/null; then
-					missing+=("$cmd")
+				if ! command -v "${cmd}" &>/dev/null; then
+					missing+=("${cmd}")
 				fi
 			done
 
 			if [[ ${#missing[@]} -gt 0 ]]; then
 				log_error "Ainda faltam comandos após instalação: ${missing[*]}"
 				log_info "Instale manualmente com: apt-get install build-essential meson ninja-build pkg-config dpkg-dev curl tar patch"
-				return $EXIT_DEPS_MISSING
+				return "${EXIT_DEPS_MISSING}"
 			fi
 		else
 			log_error "Falha ao instalar dependências automaticamente"
 			log_info "Instale manualmente com: apt-get install build-essential meson ninja-build pkg-config dpkg-dev curl tar patch"
-			return $EXIT_DEPS_MISSING
+			return "${EXIT_DEPS_MISSING}"
 		fi
 	fi
 
 	if [[ ${#version_issues[@]} -gt 0 ]]; then
 		log_error "Versões incompatíveis:"
 		for issue in "${version_issues[@]}"; do
-			log_error "  - $issue"
+			log_error "  - ${issue}"
 		done
-		return $EXIT_DEPS_MISSING
+		return "${EXIT_DEPS_MISSING}"
 	fi
 
 	log_info "Dependências de build: OK"
@@ -588,8 +597,8 @@ check_dependencies() {
 	local -a lib_deps=(
 		"libdrm"
 		"xkbcommon"
-		"udev"
-		"systemd"
+		"libudev"
+		"libsystemd"
 		"pango"
 		"fontconfig"
 		"freetype2"
@@ -601,15 +610,15 @@ check_dependencies() {
 
 	local -a missing_libs=()
 	for lib in "${lib_deps[@]}"; do
-		if ! pkg-config --exists "$lib" 2>/dev/null; then
-			missing_libs+=("$lib")
+		if ! pkg-config --exists "${lib}" 2>/dev/null; then
+			missing_libs+=("${lib}")
 		fi
 	done
 
 	if [[ ${#missing_libs[@]} -gt 0 ]]; then
 		log_warn "Bibliotecas faltando: ${missing_libs[*]}"
 		log_info "Tentando instalar dependências..."
-		install_build_deps || return $EXIT_DEPS_MISSING
+		install_build_deps || return "${EXIT_DEPS_MISSING}"
 	fi
 
 	# Verifica libtsm especificamente
@@ -620,7 +629,7 @@ check_dependencies() {
 
 	BUILD_STATE[deps_checked]=1
 	log_info "Todas as dependências verificadas"
-	return $EXIT_SUCCESS
+	return "${EXIT_SUCCESS}"
 }
 
 install_build_deps() {
@@ -635,6 +644,7 @@ install_build_deps() {
 		curl
 		tar
 		patch
+		git
 		libdrm-dev
 		libxkbcommon-dev
 		libudev-dev
@@ -645,7 +655,9 @@ install_build_deps() {
 		libgbm-dev
 		libegl1-mesa-dev
 		libgles2-mesa-dev
+		libgles2-mesa-dev
 		libinput-dev
+		libtsm-dev
 	)
 
 	export DEBIAN_FRONTEND=noninteractive
@@ -671,11 +683,11 @@ check_libtsm_version() {
 	local version
 	version=$(pkg-config --modversion libtsm 2>/dev/null || echo "0")
 
-	if version_gte "$version" "4.3.0"; then
-		log_info "libtsm version: $version (OK)"
+	if version_gte "${version}" "4.3.0"; then
+		log_info "libtsm version: ${version} (OK)"
 		return 0
 	else
-		log_warn "libtsm version: $version (requer >= 4.3.0)"
+		log_warn "libtsm version: ${version} (requer >= 4.3.0)"
 		return 1
 	fi
 }
@@ -689,91 +701,91 @@ phase_download() {
 	CURRENT_PHASE=2
 
 	# Verifica e obtém versões mais recentes se habilitado
-	if [[ "$CHECK_LATEST" -eq 1 ]]; then
+	if [[ ${CHECK_LATEST} -eq 1 ]]; then
 		log_info "Verificando versões mais recentes via API GitHub..."
 
 		# Verifica kmscon
 		local kmscon_api_output
-		kmscon_api_output=$(check_latest_version "kmscon" "$KMSCON_API_URL" 2>/dev/null)
-		if [[ -n "$kmscon_api_output" ]]; then
+		kmscon_api_output=$(check_latest_version "kmscon" "${KMSCON_API_URL}" 2>/dev/null)
+		if [[ -n ${kmscon_api_output} ]]; then
 			# Extrai versão e URL do output
-			local latest_version=$(echo "$kmscon_api_output" | grep "^LATEST_VERSION=" | cut -d'"' -f2)
-			local latest_url=$(echo "$kmscon_api_output" | grep "^LATEST_URL=" | cut -d'"' -f2)
+			local latest_version=$(echo "${kmscon_api_output}" | grep "^LATEST_VERSION=" | cut -d"'" -f2)
+			local latest_url=$(echo "${kmscon_api_output}" | grep "^LATEST_URL=" | cut -d"'" -f2)
 
-			if [[ -n "$latest_version" ]]; then
-				BUILD_STATE[kmscon_latest_version]="$latest_version"
-				BUILD_STATE[kmscon_latest_url]="$latest_url"
+			if [[ -n ${latest_version} ]]; then
+				BUILD_STATE[kmscon_latest_version]="${latest_version}"
+				BUILD_STATE[kmscon_latest_url]="${latest_url}"
 
 				# Compara versões
-				if compare_semantic_versions "$latest_version" "$KMSCON_VERSION"; then
-					if [[ "$latest_version" != "$KMSCON_VERSION" ]]; then
-						log_warn "Nova versão do kmscon disponível: v${latest_version} (local: v$KMSCON_VERSION)"
+				if compare_semantic_versions "${latest_version}" "${KMSCON_VERSION}"; then
+					if [[ ${latest_version} != "${KMSCON_VERSION}" ]]; then
+						log_warn "Nova versão do kmscon disponível: v${latest_version} (local: v${KMSCON_VERSION})"
 						log_info "Usando versão mais recente: v${latest_version}"
 					else
-						log_info "kmscon já está na versão mais recente: v$KMSCON_VERSION"
+						log_info "kmscon já está na versão mais recente: v${KMSCON_VERSION}"
 					fi
 				fi
 			else
 				log_warn "Não foi possível extrair versão da API do kmscon"
 			fi
 		else
-			log_warn "Não foi possível verificar versão mais recente do kmscon, usando v$KMSCON_VERSION"
+			log_warn "Não foi possível verificar versão mais recente do kmscon, usando v${KMSCON_VERSION}"
 		fi
 
 		# Verifica libtsm se necessário
-		if [[ "${BUILD_STATE[need_libtsm_build]:-0}" -eq 1 ]]; then
+		if [[ ${BUILD_STATE[need_libtsm_build]:-0} -eq 1 ]]; then
 			local libtsm_api_output
-			libtsm_api_output=$(check_latest_version "libtsm" "$LIBTSM_API_URL" 2>/dev/null)
-			if [[ -n "$libtsm_api_output" ]]; then
+			libtsm_api_output=$(check_latest_version "libtsm" "${LIBTSM_API_URL}" 2>/dev/null)
+			if [[ -n ${libtsm_api_output} ]]; then
 				# Extrai versão e URL do output
-				local latest_version=$(echo "$libtsm_api_output" | grep "^LATEST_VERSION=" | cut -d'"' -f2)
-				local latest_url=$(echo "$libtsm_api_output" | grep "^LATEST_URL=" | cut -d'"' -f2)
+				local latest_version=$(echo "${libtsm_api_output}" | grep "^LATEST_VERSION=" | cut -d"'" -f2)
+				local latest_url=$(echo "${libtsm_api_output}" | grep "^LATEST_URL=" | cut -d"'" -f2)
 
-				if [[ -n "$latest_version" ]]; then
-					BUILD_STATE[libtsm_latest_version]="$latest_version"
-					BUILD_STATE[libtsm_latest_url]="$latest_url"
+				if [[ -n ${latest_version} ]]; then
+					BUILD_STATE[libtsm_latest_version]="${latest_version}"
+					BUILD_STATE[libtsm_latest_url]="${latest_url}"
 
-					if compare_semantic_versions "$latest_version" "$LIBTSM_VERSION"; then
-						if [[ "$latest_version" != "$LIBTSM_VERSION" ]]; then
-							log_warn "Nova versão do libtsm disponível: v${latest_version} (local: v$LIBTSM_VERSION)"
+					if compare_semantic_versions "${latest_version}" "${LIBTSM_VERSION}"; then
+						if [[ ${latest_version} != "${LIBTSM_VERSION}" ]]; then
+							log_warn "Nova versão do libtsm disponível: v${latest_version} (local: v${LIBTSM_VERSION})"
 							log_info "Usando versão mais recente: v${latest_version}"
 						else
-							log_info "libtsm já está na versão mais recente: v$LIBTSM_VERSION"
+							log_info "libtsm já está na versão mais recente: v${LIBTSM_VERSION}"
 						fi
 					fi
 				else
 					log_warn "Não foi possível extrair versão da API do libtsm"
 				fi
 			else
-				log_warn "Não foi possível verificar versão mais recente do libtsm, usando v$LIBTSM_VERSION"
+				log_warn "Não foi possível verificar versão mais recente do libtsm, usando v${LIBTSM_VERSION}"
 			fi
 		fi
 	fi
 
 	# Download kmscon
 	if ! download_kmscon; then
-		return $EXIT_DOWNLOAD_FAILED
+		return "${EXIT_DOWNLOAD_FAILED}"
 	fi
 
 	# Download libtsm se necessário
-	if [[ "${BUILD_STATE[need_libtsm_build]:-0}" -eq 1 ]]; then
+	if [[ ${BUILD_STATE[need_libtsm_build]:-0} -eq 1 ]]; then
 		if ! download_libtsm; then
-			return $EXIT_DOWNLOAD_FAILED
+			return "${EXIT_DOWNLOAD_FAILED}"
 		fi
 	fi
 
 	BUILD_STATE[download_complete]=1
 	log_info "Fase de download concluída"
-	return $EXIT_SUCCESS
+	return "${EXIT_SUCCESS}"
 }
 
 download_kmscon() {
 	# Determina qual versão usar
-	local effective_version="${BUILD_STATE[kmscon_latest_version]:-$KMSCON_VERSION}"
-	local effective_url="${BUILD_STATE[kmscon_latest_url]:-$KMSCON_URL}"
+	local effective_version="${BUILD_STATE[kmscon_latest_version]:-${KMSCON_VERSION}}"
+	local effective_url="${BUILD_STATE[kmscon_latest_url]:-${KMSCON_URL}}"
 
 	# Atualiza URL se versão mudou
-	if [[ -n "${BUILD_STATE[kmscon_latest_version]:-}" ]]; then
+	if [[ -n ${BUILD_STATE[kmscon_latest_version]-} ]]; then
 		effective_url="${BUILD_STATE[kmscon_latest_url]}"
 	fi
 
@@ -783,116 +795,148 @@ download_kmscon() {
 	local version_file="${CACHE_DIR}/.kmscon_version"
 
 	log_info "=== Download do KMSCON ==="
-	log_info "Versão configurada: $KMSCON_VERSION"
-	log_info "Versão efetiva: $effective_version"
-	log_info "URL: $effective_url"
+	log_info "Versão configurada: v${KMSCON_VERSION}"
+	log_info "Versão efetiva: v${effective_version}"
+	log_info "URL: ${effective_url}"
 
 	# Verifica versão em cache
 	local cached_version
-	cached_version=$(get_cached_version "$version_file")
+	cached_version=$(get_cached_version "${version_file}")
 
 	# Lógica idempotente: verifica se precisa re-baixar
 	local should_download=false
 
-	if [[ "$FORCE_REDOWNLOAD" -eq 1 ]]; then
+	if [[ ${FORCE_REDOWNLOAD} -eq 1 ]]; then
 		log_info "FORCE_REDOWNLOAD=1: Forçando novo download"
 		should_download=true
-	elif [[ ! -f "$cache_file" ]]; then
+	elif [[ ! -f ${cache_file} ]]; then
 		log_info "Arquivo não encontrado em cache, será necessário download"
 		should_download=true
-	elif [[ "$cached_version" != "$effective_version" ]]; then
-		log_info "Versão em cache ($cached_version) diferente da desejada ($effective_version)"
+	elif [[ ${cached_version} != "${effective_version}" ]]; then
+		log_info "Versão em cache (v${cached_version}) diferente da desejada (v${effective_version})"
 		should_download=true
-	elif [[ ! -s "$cache_file" ]]; then
+	elif [[ ! -s ${cache_file} ]]; then
 		log_warn "Arquivo em cache está vazio, será necessário novo download"
 		should_download=true
 	else
-		log_info "Usando cache existente: $cache_file (v$cached_version)"
+		log_info "Usando cache existente: ${cache_file} (v${cached_version})"
 	fi
 
 	# Se precisa baixar, limpa arquivos antigos
-	if [[ "$should_download" == true ]]; then
+	if [[ ${should_download} == true ]]; then
 		# Limpa arquivos antigos de versões diferentes
-		if [[ -n "$cached_version" && "$cached_version" != "$effective_version" ]]; then
+		if [[ -n ${cached_version} && ${cached_version} != "${effective_version}" ]]; then
 			local old_filename="kmscon-${cached_version}.tar.gz"
 			local old_cache_file="${CACHE_DIR}/${old_filename}"
 
-			if [[ -f "$old_cache_file" ]]; then
-				log_info "Removendo arquivo de versão anterior: $old_cache_file"
-				rm -f "$old_cache_file"
+			if [[ -f ${old_cache_file} ]]; then
+				log_info "Removendo arquivo de versão anterior: ${old_cache_file}"
+				rm -f "${old_cache_file}"
 			fi
 
 			# Limpa diretório de build anterior
 			local old_build_dir="${BUILD_ROOT}/src"
-			if [[ -d "$old_build_dir" ]]; then
-				log_info "Limpando diretório de build anterior: $old_build_dir"
-				rm -rf "$old_build_dir"
+			if [[ -d ${old_build_dir} ]]; then
+				log_info "Limpando diretório de build anterior: ${old_build_dir}"
+				rm -rf "${old_build_dir}"
 			fi
 		fi
 
-		# Download via tarball_url da API (forma oficial, sempre disponível)
+		# Download via tarball_url da API
 		log_info "Iniciando download de kmscon v${effective_version} via API GitHub..."
-		if ! download_with_retry "$effective_url" "$cache_file"; then
-			log_error "Falha ao baixar kmscon via API GitHub"
+		if ! download_with_retry "${effective_url}" "${cache_file}"; then
+			log_warn "Falha ao baixar kmscon via API GitHub, tentando git clone..."
+			if clone_kmscon_from_git "${effective_version}"; then
+				return 0
+			fi
+			log_error "Todos os métodos de download falharam"
 			return 1
 		fi
 
 		# Salva versão no cache
-		save_cached_version "$version_file" "$effective_version"
+		save_cached_version "${version_file}" "${effective_version}"
 		log_info "Download concluído e salvo em cache"
 	fi
 
 	# Verifica integridade do arquivo (tamanho mínimo)
 	local file_size
-	file_size=$(stat -c%s "$cache_file" 2>/dev/null || echo "0")
-	if [[ $file_size -lt 1024 ]]; then
+	file_size=$(stat -c%s "${cache_file}" 2>/dev/null || echo "0")
+	if [[ ${file_size} -lt 1024 ]]; then
 		log_error "Arquivo baixado muito pequeno (${file_size} bytes), possivelmente corrompido"
-		rm -f "$cache_file"
+		rm -f "${cache_file}"
 		return 1
 	fi
 
-	log_info "Arquivo em cache: $cache_file ($file_size bytes)"
+	log_info "Arquivo em cache: ${cache_file} (${file_size} bytes)"
 
 	# Extrai
 	local extract_dir="${BUILD_ROOT}/src"
-	rm -rf "$extract_dir"
-	mkdir -p "$extract_dir"
+	rm -rf "${extract_dir}"
+	mkdir -p "${extract_dir}"
 
 	log_info "Extraindo ${filename}..."
 	# Extrai o tarball .tar.gz da API (mantém estrutura original)
-	if ! tar -xzf "$cache_file" -C "$extract_dir" 2>/dev/null; then
-		log_error "Falha ao extrair arquivo: $cache_file"
+	if ! tar -xzf "${cache_file}" -C "${extract_dir}" 2>/dev/null; then
+		log_error "Falha ao extrair arquivo: ${cache_file}"
 		return 1
 	fi
 
 	# O tarball da API extrai como "kmscon-kmscon-XXXXXXX/" (inclui hash do commit)
 	# Encontra o diretório real e reorganiza para estrutura esperada
 	local extracted_subdir
-	extracted_subdir=$(find "$extract_dir" -maxdepth 1 -type d -name "*kmscon*" 2>/dev/null | head -1)
-	if [[ -n "$extracted_subdir" && "$extracted_subdir" != "$extract_dir/kmscon" ]]; then
-		log_info "Reorganizando estrutura extraída: $(basename "$extracted_subdir") -> kmscon/"
-		mv "$extracted_subdir" "$extract_dir/kmscon" 2>/dev/null || true
+	extracted_subdir=$(find "${extract_dir}" -maxdepth 1 -type d -name "*kmscon*" 2>/dev/null | head -1)
+	if [[ -n ${extracted_subdir} && ${extracted_subdir} != "${extract_dir}/kmscon" ]]; then
+		log_info "Reorganizando estrutura extraída: $(basename "${extracted_subdir}") -> kmscon/"
+		mv "${extracted_subdir}" "${extract_dir}/kmscon" 2>/dev/null || true
 	fi
 
-	# Verifica se extração foi bem-sucedida
-	if [[ ! -f "$extract_dir/meson.build" && ! -f "$extract_dir/kmscon/meson.build" ]]; then
-		log_error "Extração parece ter falhado: meson.build não encontrado"
+	# Verifica se extração foi bem-sucedida e determina o diretório correto
+	local actual_src_dir="${extract_dir}"
+
+	# Verifica se meson.build está no diretório raiz ou no subdiretório kmscon
+	if [[ -f "${extract_dir}/meson.build" ]]; then
+		log_info "meson.build encontrado em: ${extract_dir}"
+		actual_src_dir="${extract_dir}"
+	elif [[ -f "${extract_dir}/kmscon/meson.build" ]]; then
+		log_info "meson.build encontrado em: ${extract_dir}/kmscon"
+		actual_src_dir="${extract_dir}/kmscon"
+	else
+		# Tenta encontrar meson.build recursivamente
+		local meson_build_path
+		meson_build_path=$(find "${extract_dir}" -name "meson.build" -type f 2>/dev/null | head -1)
+		if [[ -z ${meson_build_path} ]]; then
+			log_error "Extração parece ter falhado: meson.build não encontrado"
+			log_error "Estrutura do diretório:"
+			ls -la "${extract_dir}" 2>/dev/null || true
+			return 1
+		fi
+		actual_src_dir="$(dirname "${meson_build_path}")"
+		log_info "meson.build encontrado em: ${actual_src_dir}"
+	fi
+
+	# Valida o diretório de source
+	if [[ ! -d ${actual_src_dir} ]]; then
+		log_error "Diretório de source não existe: ${actual_src_dir}"
 		return 1
 	fi
 
-	BUILD_STATE[kmscon_src]="$extract_dir"
-	BUILD_STATE[kmscon_version]="$effective_version"
-	log_info "kmscon v${effective_version} extraído com sucesso em: $extract_dir"
+	# Log detalhado da estrutura
+	log_debug "Estrutura do diretório de source:"
+	ls -la "${actual_src_dir}" 2>/dev/null | head -20 || true
+
+	BUILD_STATE[kmscon_src]="${actual_src_dir}"
+	BUILD_STATE[kmscon_version]="${effective_version}"
+	log_info "kmscon v${effective_version} extraído com sucesso em: ${actual_src_dir}"
 	return 0
 }
 
 download_libtsm() {
 	# Determina qual versão usar
-	local effective_version="${BUILD_STATE[libtsm_latest_version]:-$LIBTSM_VERSION}"
-	local effective_url="${BUILD_STATE[libtsm_latest_url]:-$LIBTSM_URL}"
+	local effective_version="${BUILD_STATE[libtsm_latest_version]:-${LIBTSM_VERSION}}"
+	local effective_url="${BUILD_STATE[libtsm_latest_url]:-${LIBTSM_URL}}"
 
 	# Atualiza URL se versão mudou
-	if [[ -n "${BUILD_STATE[libtsm_latest_version]:-}" ]]; then
+	if [[ -n ${BUILD_STATE[libtsm_latest_version]-} ]]; then
 		effective_url="${BUILD_STATE[libtsm_latest_url]}"
 	fi
 
@@ -902,116 +946,120 @@ download_libtsm() {
 	local version_file="${CACHE_DIR}/.libtsm_version"
 
 	log_info "=== Download do LIBTSM ==="
-	log_info "Versão configurada: $LIBTSM_VERSION"
-	log_info "Versão efetiva: $effective_version"
-	log_info "URL: $effective_url"
+	log_info "Versão configurada: v${LIBTSM_VERSION}"
+	log_info "Versão efetiva: v${effective_version}"
+	log_info "URL: ${effective_url}"
 
 	# Verifica versão em cache
 	local cached_version
-	cached_version=$(get_cached_version "$version_file")
+	cached_version=$(get_cached_version "${version_file}")
 
 	# Lógica idempotente: verifica se precisa re-baixar
 	local should_download=false
 
-	if [[ "$FORCE_REDOWNLOAD" -eq 1 ]]; then
+	if [[ ${FORCE_REDOWNLOAD} -eq 1 ]]; then
 		log_info "FORCE_REDOWNLOAD=1: Forçando novo download"
 		should_download=true
-	elif [[ ! -f "$cache_file" ]]; then
+	elif [[ ! -f ${cache_file} ]]; then
 		log_info "Arquivo não encontrado em cache, será necessário download"
 		should_download=true
-	elif [[ "$cached_version" != "$effective_version" ]]; then
-		log_info "Versão em cache ($cached_version) diferente da desejada ($effective_version)"
+	elif [[ ${cached_version} != "${effective_version}" ]]; then
+		log_info "Versão em cache (v${cached_version}) diferente da desejada (v${effective_version})"
 		should_download=true
-	elif [[ ! -s "$cache_file" ]]; then
+	elif [[ ! -s ${cache_file} ]]; then
 		log_warn "Arquivo em cache está vazio, será necessário novo download"
 		should_download=true
 	else
-		log_info "Usando cache existente: $cache_file (v$cached_version)"
+		log_info "Usando cache existente: ${cache_file} (v${cached_version})"
 	fi
 
 	# Se precisa baixar, limpa arquivos antigos
-	if [[ "$should_download" == true ]]; then
+	if [[ ${should_download} == true ]]; then
 		# Limpa arquivos antigos de versões diferentes
-		if [[ -n "$cached_version" && "$cached_version" != "$effective_version" ]]; then
+		if [[ -n ${cached_version} && ${cached_version} != "${effective_version}" ]]; then
 			local old_filename="libtsm-${cached_version}.tar.gz"
 			local old_cache_file="${CACHE_DIR}/${old_filename}"
 
-			if [[ -f "$old_cache_file" ]]; then
-				log_info "Removendo arquivo de versão anterior: $old_cache_file"
-				rm -f "$old_cache_file"
+			if [[ -f ${old_cache_file} ]]; then
+				log_info "Removendo arquivo de versão anterior: ${old_cache_file}"
+				rm -f "${old_cache_file}"
 			fi
 		fi
 
 		# Limpa diretório de build anterior
 		local old_build_dir="${BUILD_ROOT}/src/libtsm-${cached_version}"
-		if [[ -d "$old_build_dir" ]]; then
-			log_info "Limpando diretório de build anterior: $old_build_dir"
-			rm -rf "$old_build_dir"
+		if [[ -d ${old_build_dir} ]]; then
+			log_info "Limpando diretório de build anterior: ${old_build_dir}"
+			rm -rf "${old_build_dir}"
 		fi
 
-		# Download via tarball_url da API (forma oficial, sempre disponível)
+		# Download via tarball_url da API
 		log_info "Iniciando download de libtsm v${effective_version} via API GitHub..."
-		if ! download_with_retry "$effective_url" "$cache_file"; then
-			log_error "Falha ao baixar libtsm via API GitHub"
+		if ! download_with_retry "${effective_url}" "${cache_file}"; then
+			log_warn "Falha ao baixar libtsm via API GitHub, tentando git clone..."
+			if clone_libtsm_from_git; then
+				return 0
+			fi
+			log_error "Todos os métodos de download falharam"
 			return 1
 		fi
 
 		# Salva versão no cache
-		save_cached_version "$version_file" "$effective_version"
+		save_cached_version "${version_file}" "${effective_version}"
 		log_info "Download concluído e salvo em cache"
 	fi
 
 	# Verifica integridade do arquivo
 	local file_size
-	file_size=$(stat -c%s "$cache_file" 2>/dev/null || echo "0")
-	if [[ $file_size -lt 1024 ]]; then
+	file_size=$(stat -c%s "${cache_file}" 2>/dev/null || echo "0")
+	if [[ ${file_size} -lt 1024 ]]; then
 		log_error "Arquivo baixado muito pequeno (${file_size} bytes), possivelmente corrompido"
-		rm -f "$cache_file"
+		rm -f "${cache_file}"
 		return 1
 	fi
 
-	log_info "Arquivo em cache: $cache_file ($file_size bytes)"
+	log_info "Arquivo em cache: ${cache_file} (${file_size} bytes)"
 
 	# Extrai
 	local extract_dir="${BUILD_ROOT}/src"
 	rm -rf "${extract_dir}/libtsm-${effective_version}"
-	mkdir -p "$extract_dir"
+	mkdir -p "${extract_dir}"
 
 	log_info "Extraindo ${filename}..."
-	if ! tar -xzf "$cache_file" -C "$extract_dir" 2>/dev/null; then
+	if ! tar -xzf "${cache_file}" -C "${extract_dir}" 2>/dev/null; then
 		log_error "Falha ao extrair libtsm"
 		return 1
 	fi
 
 	# O tarball da API extrai com nome tipo "kmscon-libtsm-XXXXXXX/" (inclui hash do commit)
 	# Precisamos encontrar o diretório real que foi criado
-	local extracted_dir=$(find "$extract_dir" -maxdepth 1 -type d -name "*libtsm*" 2>/dev/null | head -1)
+	local extracted_dir=$(find "${extract_dir}" -maxdepth 1 -type d -name "*libtsm*" 2>/dev/null | head -1)
 
-	if [[ -z "$extracted_dir" ]]; then
+	if [[ -z ${extracted_dir} ]]; then
 		log_error "Diretório extraído não encontrado"
 		return 1
 	fi
 
-	log_info "Diretório extraído: $(basename "$extracted_dir")"
+	log_info "Diretório extraído: $(basename "${extracted_dir}")"
 
 	# Verifica se extração foi bem-sucedida
-	if [[ ! -f "$extracted_dir/meson.build" ]]; then
-		log_error "Extração parece ter falhado: meson.build não encontrado em $extracted_dir"
+	if [[ ! -f "${extracted_dir}/meson.build" ]]; then
+		log_error "Extração parece ter falhado: meson.build não encontrado em: ${extracted_dir}"
 		return 1
 	fi
 
-	BUILD_STATE[libtsm_src]="$extracted_dir"
-	BUILD_STATE[libtsm_version]="$effective_version"
-	log_info "libtsm v${effective_version} extraído com sucesso em: $extracted_dir"
+	BUILD_STATE[libtsm_src]="${extracted_dir}"
+	BUILD_STATE[libtsm_version]="${effective_version}"
+	log_info "libtsm v${effective_version} extraído com sucesso em: ${extracted_dir}"
 	return 0
 }
 
 clone_libtsm_from_git() {
-	local effective_version="${BUILD_STATE[libtsm_latest_version]:-$LIBTSM_VERSION}"
+	local effective_version="${BUILD_STATE[libtsm_latest_version]:-${LIBTSM_VERSION}}"
 	local dest="${BUILD_ROOT}/src/libtsm"
 
-	rm -rf "$dest"
-	mkdir -p "$(dirname "$dest")"
+	rm -rf "${dest}"
+	mkdir -p "$(dirname "${dest}")"
 
 	log_info "Clonando libtsm v${effective_version} do git (fallback)..."
 
@@ -1020,18 +1068,18 @@ clone_libtsm_from_git() {
 	local fallback_url="https://github.com/Aetf/libtsm.git"
 
 	if git clone --depth 1 --branch "v${effective_version}" \
-		"$git_url" "$dest" 2>/dev/null; then
-		log_info "Clone bem-sucedido de $git_url (tag v${effective_version})"
+		"${git_url}" "${dest}" 2>/dev/null; then
+		log_info "Clone bem-sucedido de ${git_url} (tag v${effective_version})"
 	elif git clone --depth 1 --branch "v${effective_version}" \
-		"$fallback_url" "$dest" 2>/dev/null; then
-		log_info "Clone bem-sucedido de $fallback_url (tag v${effective_version})"
+		"${fallback_url}" "${dest}" 2>/dev/null; then
+		log_info "Clone bem-sucedido de ${fallback_url} (tag v${effective_version})"
 	else
 		# Fallback para master/main se tag não existe
 		log_warn "Tag v${effective_version} não encontrada, tentando branch padrão..."
 
-		if git clone --depth 1 "$git_url" "$dest" 2>/dev/null; then
+		if git clone --depth 1 "${git_url}" "${dest}" 2>/dev/null; then
 			log_info "Clone bem-sucedido do branch padrão"
-		elif git clone --depth 1 "$fallback_url" "$dest" 2>/dev/null; then
+		elif git clone --depth 1 "${fallback_url}" "${dest}" 2>/dev/null; then
 			log_info "Clone bem-sucedido do branch padrão (fallback)"
 		else
 			log_error "Falha ao clonar libtsm de qualquer fonte"
@@ -1039,19 +1087,19 @@ clone_libtsm_from_git() {
 		fi
 	fi
 
-	BUILD_STATE[libtsm_src]="$dest"
-	BUILD_STATE[libtsm_version]="$effective_version"
-	log_info "libtsm clonado em: $dest"
+	BUILD_STATE[libtsm_src]="${dest}"
+	BUILD_STATE[libtsm_version]="${effective_version}"
+	log_info "libtsm clonado em: ${dest}"
 	return 0
 }
 
 # Clona kmscon do repositório git (fallback quando download falha)
 clone_kmscon_from_git() {
-	local effective_version="${1:-$KMSCON_VERSION}"
+	local effective_version="${1:-${KMSCON_VERSION}}"
 	local dest="${BUILD_ROOT}/src"
 
-	rm -rf "$dest"
-	mkdir -p "$dest"
+	rm -rf "${dest}"
+	mkdir -p "${dest}"
 
 	log_info "Clonando kmscon v${effective_version} do git (fallback)..."
 
@@ -1064,47 +1112,78 @@ clone_kmscon_from_git() {
 	local cloned=false
 
 	for git_url in "${git_urls[@]}"; do
-		log_info "Tentando clonar de: $git_url"
+		log_info "Tentando clonar de: ${git_url}"
 
 		# Tenta clonar a tag específica
 		if git clone --depth 1 --branch "v${effective_version}" \
-			"$git_url" "$dest" 2>/dev/null; then
-			log_info "Clone bem-sucedido de $git_url (tag v${effective_version})"
+			"${git_url}" "${dest}" 2>/dev/null; then
+			log_info "Clone bem-sucedido de ${git_url} (tag v${effective_version})"
 			cloned=true
 			break
 		fi
 
 		# Tenta branch master/main se tag não existe
 		log_warn "Tag não encontrada, tentando branch padrão..."
-		if git clone --depth 1 "$git_url" "$dest" 2>/dev/null; then
-			log_info "Clone bem-sucedido do branch padrão de $git_url"
+		if git clone --depth 1 "${git_url}" "${dest}" 2>/dev/null; then
+			log_info "Clone bem-sucedido do branch padrão de: ${git_url}"
 			cloned=true
 			break
 		fi
 	done
 
-	if [[ "$cloned" != "true" ]]; then
+	if [[ ${cloned} != "true" ]]; then
 		log_error "Falha ao clonar kmscon de qualquer fonte"
 		return 1
 	fi
 
-	# Verifica se extração foi bem-sucedida
-	if [[ ! -f "$dest/meson.build" ]]; then
+	# Verifica se extração foi bem-sucedida e determina o diretório correto
+	local actual_src_dir="${dest}"
+
+	if [[ ! -f "${dest}/meson.build" ]]; then
 		# Tenta encontrar subdiretório
 		local subdir
-		subdir=$(find "$dest" -maxdepth 2 -name "meson.build" -printf "%h\n" 2>/dev/null | head -1)
-		if [[ -n "$subdir" && "$subdir" != "$dest" ]]; then
-			log_info "Reorganizando estrutura clonada..."
-			mv "$subdir"/* "$dest/" 2>/dev/null || true
-		elif [[ ! -f "$dest/meson.build" ]]; then
+		subdir=$(find "${dest}" -maxdepth 2 -name "meson.build" -printf "%h\n" 2>/dev/null | head -1)
+		if [[ -n ${subdir} && ${subdir} != "${dest}" ]]; then
+			log_info "Reorganizando estrutura clonada: $(basename "${subdir}") -> ${dest}"
+			mv "${subdir}"/* "${dest}/" 2>/dev/null || true
+			# Tenta mover arquivos ocultos também
+			mv "${subdir}"/.[!.]* "${dest}/" 2>/dev/null || true
+		elif [[ ! -f "${dest}/meson.build" ]]; then
 			log_error "meson.build não encontrado após clone"
+			log_error "Estrutura do diretório:"
+			ls -la "${dest}" 2>/dev/null || true
 			return 1
 		fi
 	fi
 
-	BUILD_STATE[kmscon_src]="$dest"
-	BUILD_STATE[kmscon_version]="$effective_version"
-	log_info "kmscon v${effective_version} clonado com sucesso em: $dest"
+	# Verifica novamente após reorganização
+	if [[ -f "${dest}/meson.build" ]]; then
+		actual_src_dir="${dest}"
+	else
+		# Tenta encontrar meson.build recursivamente
+		local meson_build_path
+		meson_build_path=$(find "${dest}" -name "meson.build" -type f 2>/dev/null | head -1)
+		if [[ -z ${meson_build_path} ]]; then
+			log_error "meson.build não encontrado em nenhum subdiretório"
+			return 1
+		fi
+		actual_src_dir="$(dirname "${meson_build_path}")"
+		log_info "meson.build encontrado em: ${actual_src_dir}"
+	fi
+
+	# Valida o diretório de source
+	if [[ ! -d ${actual_src_dir} ]]; then
+		log_error "Diretório de source não existe: ${actual_src_dir}"
+		return 1
+	fi
+
+	# Log detalhado da estrutura
+	log_debug "Estrutura do diretório de source:"
+	ls -la "${actual_src_dir}" 2>/dev/null | head -20 || true
+
+	BUILD_STATE[kmscon_src]="${actual_src_dir}"
+	BUILD_STATE[kmscon_version]="${effective_version}"
+	log_info "kmscon v${effective_version} clonado com sucesso em: ${actual_src_dir}"
 	return 0
 }
 
@@ -1116,15 +1195,15 @@ phase_deps() {
 	log_info "=== Fase 3: Build de Dependências ==="
 	CURRENT_PHASE=3
 
-	if [[ "${BUILD_STATE[need_libtsm_build]:-0}" -eq 1 ]]; then
+	if [[ ${BUILD_STATE[need_libtsm_build]:-0} -eq 1 ]]; then
 		if ! build_libtsm; then
-			return $EXIT_BUILD_FAILED
+			return "${EXIT_BUILD_FAILED}"
 		fi
 	fi
 
 	BUILD_STATE[deps_complete]=1
 	log_info "Fase de dependências concluída"
-	return $EXIT_SUCCESS
+	return "${EXIT_SUCCESS}"
 }
 
 build_libtsm() {
@@ -1133,32 +1212,31 @@ build_libtsm() {
 
 	log_info "Compilando libtsm..."
 
-	rm -rf "$build_dir"
-	mkdir -p "$build_dir"
+	rm -rf "${build_dir}"
+	mkdir -p "${build_dir}"
 
-	cd "$src_dir" || return 1
+	cd "${src_dir}" || return 1
 
 	# Configura
 	log_info "Configurando libtsm com meson..."
-	meson setup "$build_dir" \
+	meson setup "${build_dir}" \
 		--prefix=/usr \
 		--buildtype=release \
-		-Ddocs=false \
 		-Dtests=false || {
 		log_error "Falha na configuração do libtsm"
 		return 1
 	}
 
 	# Build
-	log_info "Compilando libtsm com ninja..."
-	ninja -C "$build_dir" -j "$PARALLEL_JOBS" || {
+	log_info "Compilando libtsm com ninja (jobs: ${PARALLEL_JOBS})..."
+	ninja -C "${build_dir}" -j "${PARALLEL_JOBS}" || {
 		log_error "Falha no build do libtsm"
 		return 1
 	}
 
 	# Instala no sistema (necessário para build do kmscon)
 	log_info "Instalando libtsm no sistema..."
-	ninja -C "$build_dir" install || {
+	ninja -C "${build_dir}" install || {
 		log_error "Falha ao instalar libtsm"
 		return 1
 	}
@@ -1180,42 +1258,42 @@ phase_patch() {
 
 	local src_dir="${BUILD_STATE[kmscon_src]}"
 
-	if [[ ! -d "$PATCHES_DIR" ]]; then
+	if [[ ! -d ${PATCHES_DIR} ]]; then
 		log_info "Nenhum diretório de patches encontrado, pulando"
 		BUILD_STATE[patch_complete]=1
-		return $EXIT_SUCCESS
+		return "${EXIT_SUCCESS}"
 	fi
 
-	cd "$src_dir" || return 1
+	cd "${src_dir}" || return 1
 
-	local -a patches=("$PATCHES_DIR"/*.diff "$PATCHES_DIR"/*.patch)
+	local -a patches=("${PATCHES_DIR}"/*.diff "${PATCHES_DIR}"/*.patch)
 	local applied=0
 	local failed=0
 
 	for patch in "${patches[@]}"; do
-		[[ -f "$patch" ]] || continue
+		[[ -f ${patch} ]] || continue
 
 		local patch_name
-		patch_name=$(basename "$patch")
-		log_info "Aplicando patch: $patch_name"
+		patch_name=$(basename "${patch}")
+		log_info "Aplicando patch: ${patch_name}"
 
 		# Testa primeiro
-		if patch -p1 --dry-run <"$patch" &>/dev/null; then
-			if patch -p1 <"$patch"; then
-				log_info "Patch aplicado: $patch_name"
+		if patch -p1 --dry-run <"${patch}" &>/dev/null; then
+			if patch -p1 <"${patch}"; then
+				log_info "Patch aplicado: ${patch_name}"
 				((applied++))
 			else
-				log_warn "Falha ao aplicar patch: $patch_name"
+				log_warn "Falha ao aplicar patch: ${patch_name}"
 				((failed++))
 			fi
 		else
-			log_warn "Patch não aplicável (pode já estar aplicado): $patch_name"
+			log_warn "Patch não aplicável (pode já estar aplicado): ${patch_name}"
 		fi
 	done
 
-	log_info "Patches aplicados: $applied, falhas: $failed"
+	log_info "Patches aplicados: ${applied}, falhas: ${failed}"
 	BUILD_STATE[patch_complete]=1
-	return $EXIT_SUCCESS
+	return "${EXIT_SUCCESS}"
 }
 
 # =============================================================================
@@ -1229,39 +1307,70 @@ phase_configure() {
 	local src_dir="${BUILD_STATE[kmscon_src]}"
 	local build_dir="${BUILD_ROOT}/build/kmscon"
 
-	rm -rf "$build_dir"
-	mkdir -p "$build_dir"
+	# Validação robusta do diretório de source
+	if [[ -z ${src_dir} ]]; then
+		log_error "Diretório de source não definido em BUILD_STATE"
+		return "${EXIT_CONFIGURE_FAILED}"
+	fi
 
-	cd "$src_dir" || return 1
+	if [[ ! -d ${src_dir} ]]; then
+		log_error "Diretório de source não existe: ${src_dir}"
+		log_error "Conteúdo de ${BUILD_ROOT}/src:"
+		ls -la "${BUILD_ROOT}/src" 2>/dev/null || true
+		return "${EXIT_CONFIGURE_FAILED}"
+	fi
+
+	# Verifica se meson.build existe no diretório de source
+	if [[ ! -f "${src_dir}/meson.build" ]]; then
+		log_error "Arquivo meson.build não encontrado em: ${src_dir}"
+		log_error "Conteúdo do diretório de source:"
+		ls -la "${src_dir}" 2>/dev/null || true
+		log_error "Procurando meson.build recursivamente:"
+		find "${BUILD_ROOT}/src" -name "meson.build" -type f 2>/dev/null || true
+		return "${EXIT_CONFIGURE_FAILED}"
+	fi
+
+	log_info "Diretório de source validado: ${src_dir}"
+	log_info "Arquivo meson.build encontrado: OK"
+
+	# Cria diretório de build
+	rm -rf "${build_dir}"
+	mkdir -p "${build_dir}"
+
+	# Muda para o diretório de source
+	cd "${src_dir}" || return 1
 
 	log_info "Configurando meson..."
+	log_debug "Source directory: $(pwd)"
+	log_debug "Build directory: ${build_dir}"
 	log_debug "Flags: video_drm3d=enabled, renderer_gltex=enabled, font_pango=enabled"
 
 	# Configura meson com todas as flags obrigatórias
-	meson setup "$build_dir" \
+	meson setup "${build_dir}" \
 		--prefix=/usr \
 		--buildtype=release \
 		-Dvideo_drm3d=enabled \
 		-Drenderer_gltex=enabled \
 		-Dfont_pango=enabled \
-		-Dlibinput=enabled \
 		-Dmulti_seat=enabled \
 		-Dsession_terminal=enabled \
 		-Dfont_unifont=enabled \
+		-Dtests=false \
+		-Dwerror=false \
 		-Dextra_debug=false || {
 		log_error "Falha na configuração do meson"
-		return $EXIT_CONFIGURE_FAILED
+		return "${EXIT_CONFIGURE_FAILED}"
 	}
 
 	# Verifica se features foram habilitadas
-	if ! verify_features "$build_dir"; then
-		return $EXIT_FEATURE_MISSING
+	if ! verify_features "${build_dir}"; then
+		return "${EXIT_FEATURE_MISSING}"
 	fi
 
 	BUILD_STATE[configure_complete]=1
-	BUILD_STATE[build_dir]="$build_dir"
+	BUILD_STATE[build_dir]="${build_dir}"
 	log_info "Configuração concluída"
-	return $EXIT_SUCCESS
+	return "${EXIT_SUCCESS}"
 }
 
 verify_features() {
@@ -1270,7 +1379,7 @@ verify_features() {
 
 	log_info "Verificando features habilitadas..."
 
-	if [[ ! -f "$info_file" ]]; then
+	if [[ ! -f ${info_file} ]]; then
 		log_warn "Arquivo de info do meson não encontrado, pulando verificação"
 		return 0
 	fi
@@ -1278,16 +1387,16 @@ verify_features() {
 	local all_ok=true
 	for feature in "${REQUIRED_FEATURES[@]}"; do
 		# Verifica no meson-logs ou no introspect
-		if grep -q "${feature}=enabled" "$info_file" 2>/dev/null ||
-			meson introspect "$build_dir" --buildoptions 2>/dev/null | grep -q "${feature}.*enabled"; then
-			log_info "  ✓ $feature: enabled"
+		if grep -q "${feature}=enabled" "${info_file}" 2>/dev/null ||
+			meson introspect "${build_dir}" --buildoptions 2>/dev/null | grep -q "${feature}.*enabled"; then
+			log_info "  ✓ ${feature}: enabled"
 		else
-			log_warn "  ✗ $feature: não habilitado"
+			log_warn "  ✗ ${feature}: não habilitado"
 			all_ok=false
 		fi
 	done
 
-	if [[ "$all_ok" == "false" ]]; then
+	if [[ ${all_ok} == "false" ]]; then
 		log_error "Algumas features obrigatórias não foram habilitadas"
 		return 1
 	fi
@@ -1305,30 +1414,30 @@ phase_build() {
 
 	local build_dir="${BUILD_STATE[build_dir]}"
 
-	log_info "Iniciando build com ninja (jobs: $PARALLEL_JOBS)..."
+	log_info "Iniciando build com ninja (jobs: ${PARALLEL_JOBS})..."
 
-	if ! ninja -C "$build_dir" -j "$PARALLEL_JOBS" 2>&1 | tee -a "$LOG_FILE"; then
+	if ! ninja -C "${build_dir}" -j "${PARALLEL_JOBS}" 2>&1 | tee -a "${LOG_FILE}"; then
 		log_error "Falha na compilação"
-		return $EXIT_BUILD_FAILED
+		return "${EXIT_BUILD_FAILED}"
 	fi
 
 	# Verifica se binário foi criado
 	if [[ ! -f "${build_dir}/kmscon" ]]; then
 		# Tenta encontrar o binário
 		local binary
-		binary=$(find "$build_dir" -name "kmscon" -type f -executable 2>/dev/null | head -1)
-		if [[ -z "$binary" ]]; then
+		binary=$(find "${build_dir}" -name "kmscon" -type f -executable 2>/dev/null | head -1)
+		if [[ -z ${binary} ]]; then
 			log_error "Binário kmscon não encontrado após build"
-			return $EXIT_BUILD_FAILED
+			return "${EXIT_BUILD_FAILED}"
 		fi
-		BUILD_STATE[binary_path]="$binary"
+		BUILD_STATE[binary_path]="${binary}"
 	else
 		BUILD_STATE[binary_path]="${build_dir}/kmscon"
 	fi
 
 	log_info "Build concluído: ${BUILD_STATE[binary_path]}"
 	BUILD_STATE[build_complete]=1
-	return $EXIT_SUCCESS
+	return "${EXIT_SUCCESS}"
 }
 
 # =============================================================================
@@ -1340,30 +1449,30 @@ phase_package() {
 	CURRENT_PHASE=7
 
 	if ! create_deb_structure; then
-		return $EXIT_PACKAGE_FAILED
+		return "${EXIT_PACKAGE_FAILED}"
 	fi
 
 	if ! generate_control; then
-		return $EXIT_PACKAGE_FAILED
+		return "${EXIT_PACKAGE_FAILED}"
 	fi
 
 	if ! copy_build_artifacts; then
-		return $EXIT_PACKAGE_FAILED
+		return "${EXIT_PACKAGE_FAILED}"
 	fi
 
 	if ! build_deb; then
-		return $EXIT_PACKAGE_FAILED
+		return "${EXIT_PACKAGE_FAILED}"
 	fi
 
 	BUILD_STATE[package_complete]=1
 	log_info "Fase de empacotamento concluída"
-	return $EXIT_SUCCESS
+	return "${EXIT_SUCCESS}"
 }
 
 create_deb_structure() {
 	log_info "Criando estrutura de pacote DEB..."
 
-	rm -rf "$PACKAGE_ROOT"
+	rm -rf "${PACKAGE_ROOT}"
 	mkdir -p "${PACKAGE_ROOT}/DEBIAN"
 	mkdir -p "${PACKAGE_ROOT}/usr/bin"
 	mkdir -p "${PACKAGE_ROOT}/usr/lib"
@@ -1508,20 +1617,66 @@ copy_build_artifacts() {
 	log_info "Copiando artefatos de build..."
 
 	local build_dir="${BUILD_STATE[build_dir]}"
+	local binary_path="${BUILD_STATE[binary_path]}"
 
-	# Copia binário principal
-	if [[ -f "${build_dir}/kmscon" ]]; then
-		cp "${build_dir}/kmscon" "${PACKAGE_ROOT}/usr/bin/"
-		chmod 755 "${PACKAGE_ROOT}/usr/bin/kmscon"
+	# Validar que temos o caminho do binário
+	if [[ -z ${binary_path} ]] || [[ ! -f ${binary_path} ]]; then
+		log_error "Binário kmscon não encontrado em BUILD_STATE[binary_path]"
+		log_error "Tentando localizar binário ELF..."
+
+		# Fallback: buscar binário ELF (não script) - prioriza src/kmscon
+		binary_path=$(find "${build_dir}" -path "*/src/kmscon" -type f -executable 2>/dev/null | head -1)
+
+		if [[ -z ${binary_path} ]]; then
+			# Segundo fallback: qualquer kmscon que seja ELF
+			binary_path=$(find "${build_dir}" -name "kmscon" -type f -executable \
+				-exec sh -c 'file "$1" | grep -q "ELF"' _ {} \; -print 2>/dev/null | head -1)
+		fi
+
+		if [[ -z ${binary_path} ]]; then
+			log_error "Nenhum binário ELF 'kmscon' encontrado no build"
+			log_error "Conteúdo do build_dir:"
+			find "${build_dir}" -name "kmscon*" -ls 2>/dev/null || true
+			return 1
+		fi
+	fi
+
+	# Validar que é um binário ELF, não um script
+	if ! file "${binary_path}" | grep -q "ELF"; then
+		log_error "Arquivo encontrado não é binário ELF: ${binary_path}"
+		log_error "Tipo: $(file "${binary_path}")"
+
+		# Tentar encontrar o binário real em src/
+		binary_path=$(find "${build_dir}" -path "*/src/kmscon" -type f -executable 2>/dev/null | head -1)
+		if [[ -z ${binary_path} ]] || ! file "${binary_path}" | grep -q "ELF"; then
+			log_error "Falha ao localizar binário ELF real"
+			return 1
+		fi
+		log_info "Binário ELF encontrado em: ${binary_path}"
+	fi
+
+	log_info "Copiando binário: ${binary_path} -> ${PACKAGE_ROOT}/usr/bin/kmscon"
+	cp "${binary_path}" "${PACKAGE_ROOT}/usr/bin/kmscon"
+	chmod 755 "${PACKAGE_ROOT}/usr/bin/kmscon"
+
+	# Confirmar que é ELF após cópia
+	if file "${PACKAGE_ROOT}/usr/bin/kmscon" | grep -q "ELF"; then
+		log_info "Binário ELF copiado com sucesso"
 	else
-		log_error "Binário kmscon não encontrado"
+		log_error "AVISO: Arquivo copiado não é ELF!"
 		return 1
 	fi
 
-	# Copia bibliotecas se houver
+	# Copia bibliotecas se houver (raiz do build)
 	for lib in "${build_dir}"/*.so*; do
-		[[ -f "$lib" ]] || continue
-		cp "$lib" "${PACKAGE_ROOT}/usr/lib/"
+		[[ -f ${lib} ]] || continue
+		cp "${lib}" "${PACKAGE_ROOT}/usr/lib/"
+	done
+
+	# Também copiar libs de subdiretórios (src/)
+	for lib in "${build_dir}"/src/*.so*; do
+		[[ -f ${lib} ]] || continue
+		cp "${lib}" "${PACKAGE_ROOT}/usr/lib/"
 	done
 
 	# Copia arquivos de configuração
@@ -1547,21 +1702,21 @@ build_deb() {
 	local deb_name="kmscon_${KMSCON_VERSION}_${arch}.deb"
 	local deb_path="${OUTPUT_DIR}/${deb_name}"
 
-	mkdir -p "$OUTPUT_DIR"
+	mkdir -p "${OUTPUT_DIR}"
 
 	# Constrói o pacote
-	if ! dpkg-deb --build "$PACKAGE_ROOT" "$deb_path"; then
+	if ! dpkg-deb --build "${PACKAGE_ROOT}" "${deb_path}"; then
 		log_error "Falha ao construir pacote .deb"
 		return 1
 	fi
 
-	BUILD_STATE[deb_path]="$deb_path"
-	log_info "Pacote criado: $deb_path"
+	BUILD_STATE[deb_path]="${deb_path}"
+	log_info "Pacote criado: ${deb_path}"
 
 	# Verifica pacote
 	if command -v lintian &>/dev/null; then
 		log_info "Verificando pacote com lintian..."
-		lintian "$deb_path" 2>/dev/null || log_warn "Lintian reportou warnings"
+		lintian "${deb_path}" 2>/dev/null || log_warn "Lintian reportou warnings"
 	fi
 
 	return 0
@@ -1577,29 +1732,29 @@ phase_install() {
 
 	local deb_path="${BUILD_STATE[deb_path]}"
 
-	if ! install_package "$deb_path"; then
-		return $EXIT_INSTALL_FAILED
+	if ! install_package "${deb_path}"; then
+		return "${EXIT_INSTALL_FAILED}"
 	fi
 
 	if ! configure_systemd; then
-		return $EXIT_SYSTEMD_FAILED
+		return "${EXIT_SYSTEMD_FAILED}"
 	fi
 
 	if ! verify_installation; then
-		return $EXIT_INSTALL_FAILED
+		return "${EXIT_INSTALL_FAILED}"
 	fi
 
 	BUILD_STATE[install_complete]=1
 	log_info "Instalação concluída com sucesso!"
-	return $EXIT_SUCCESS
+	return "${EXIT_SUCCESS}"
 }
 
 install_package() {
 	local deb_path="$1"
 
-	log_info "Instalando pacote: $deb_path"
+	log_info "Instalando pacote: ${deb_path}"
 
-	if ! dpkg -i "$deb_path"; then
+	if ! dpkg -i "${deb_path}"; then
 		log_warn "dpkg reportou erros, tentando corrigir dependências..."
 		apt-get install -f -y || {
 			log_error "Falha ao instalar pacote e corrigir dependências"
@@ -1620,8 +1775,8 @@ configure_systemd() {
 	}
 
 	# Habilita kmscon nos TTYs configurados
-	for vt in $KMSCON_VTS; do
-		log_info "Configurando $vt para usar kmscon..."
+	for vt in ${KMSCON_VTS}; do
+		log_info "Configurando ${vt} para usar kmscon..."
 
 		# Desabilita getty neste TTY
 		systemctl disable "getty@${vt}.service" 2>/dev/null || true
@@ -1739,7 +1894,7 @@ parse_args() {
 			;;
 		-c | --clean)
 			log_info "Limpando cache e diretórios de build..."
-			rm -rf "$CACHE_DIR" "$BUILD_ROOT" "$OUTPUT_DIR"
+			rm -rf "${CACHE_DIR}" "${BUILD_ROOT}" "${OUTPUT_DIR}"
 			shift
 			;;
 		-f | --force)
@@ -1775,6 +1930,11 @@ parse_args() {
 
 main() {
 	parse_args "$@"
+
+	# Resolve "auto" ou valor inválido para número de jobs
+	if [[ ${PARALLEL_JOBS} == "auto" ]] || [[ ! ${PARALLEL_JOBS} =~ ^[0-9]+$ ]]; then
+		PARALLEL_JOBS=$(nproc 2>/dev/null || echo 4)
+	fi
 
 	# Inicializa logging
 	init_logging
@@ -1825,15 +1985,15 @@ main() {
 	log_info "Pacote: ${BUILD_STATE[deb_path]}"
 	log_info "Binário: /usr/bin/kmscon"
 	log_info "Config: /etc/kmscon/kmscon.conf"
-	if [[ -n "${BUILD_STATE[kmscon_version]:-}" ]]; then
+	if [[ -n ${BUILD_STATE[kmscon_version]-} ]]; then
 		log_info "Versão KMSCON: ${BUILD_STATE[kmscon_version]}"
 	fi
-	if [[ -n "${BUILD_STATE[libtsm_version]:-}" ]]; then
+	if [[ -n ${BUILD_STATE[libtsm_version]-} ]]; then
 		log_info "Versão LIBTSM: ${BUILD_STATE[libtsm_version]}"
 	fi
 	log_info "================================================"
 
-	return $EXIT_SUCCESS
+	return "${EXIT_SUCCESS}"
 }
 
 # Executa main

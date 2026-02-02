@@ -1,0 +1,303 @@
+#!/bin/bash
+# =============================================================================
+# Hook de Build do KMSCON para Live-Build
+# =============================================================================
+# Descrição: Executa o script de build do kmscon durante a construção da ISO
+#              com suporte a cache multi-camada Docker/CI
+# Local: config/hooks/normal/1000-build-kmscon.chroot
+# Prioridade: 1000 (execução tardia, após instalação de pacotes)
+# =============================================================================
+
+set -e
+
+# =============================================================================
+# CONFIGURAÇÕES
+# =============================================================================
+
+readonly BUILD_SCRIPT="/usr/local/share/kmscon/build-kmscon.sh"
+readonly CACHE_DIR="/var/cache/kmscon"
+readonly OUTPUT_DIR="/var/cache/kmscon-build"
+
+# Variáveis de ambiente para controle de cache
+# NOTA: Não usar 'readonly' pois estas variáveis são exportadas posteriormente
+KMSCON_CACHE_ENABLED="${KMSCON_CACHE_ENABLED:-1}"
+KMSCON_CACHE_FORCE_REFRESH="${KMSCON_CACHE_FORCE_REFRESH:-0}"
+KMSCON_DOCKER_MODE="${KMSCON_DOCKER_MODE:-auto}"
+
+# =============================================================================
+# FUNÇÕES DE UTILIDADE
+# =============================================================================
+
+log_info() {
+    echo "[KMSCON-HOOK] [INFO] $1"
+}
+
+log_warn() {
+    echo "[KMSCON-HOOK] [WARN] $1"
+}
+
+log_error() {
+    echo "[KMSCON-HOOK] [ERROR] $1" >&2
+}
+
+detect_cache_availability() {
+    # Check if cache directory exists and is accessible
+    if [[ -d "$CACHE_DIR" ]] && [[ -r "$CACHE_DIR" ]] && [[ -w "$CACHE_DIR" ]]; then
+        # Check for manifest
+        if [[ -f "${CACHE_DIR}/manifest.json" ]]; then
+            log_info "Cache disponível em: $CACHE_DIR"
+            return 0
+        fi
+    fi
+    
+    log_info "Cache não disponível ou manifesto não encontrado"
+    return 1
+}
+
+check_cached_package() {
+    local manifest_file="${CACHE_DIR}/manifest.json"
+    
+    if [[ ! -f "$manifest_file" ]]; then
+        return 1
+    fi
+    
+    # Check if jq is available for JSON parsing
+    if ! command -v jq &>/dev/null; then
+        log_warn "jq não disponível, não é possível verificar cache"
+        return 1
+    fi
+    
+    # Check manifest for kmscon entry
+    local kmscon_entry
+    kmscon_entry=$(jq -r '.entries.kmscon // empty' "$manifest_file" 2>/dev/null)
+    
+    if [[ -z "$kmscon_entry" ]]; then
+        return 1
+    fi
+    
+    # Check if entry is valid
+    local valid
+    valid=$(echo "$kmscon_entry" | jq -r '.valid // false' 2>/dev/null)
+    if [[ "$valid" != "true" ]]; then
+        return 1
+    fi
+    
+    # Check if cached package exists
+    local cached_deb
+    cached_deb=$(echo "$kmscon_entry" | jq -r '.cached_deb // empty' 2>/dev/null)
+    
+    if [[ -z "$cached_deb" ]]; then
+        return 1
+    fi
+    
+    local deb_path="${CACHE_DIR}/${cached_deb}"
+    if [[ ! -f "$deb_path" ]]; then
+        return 1
+    fi
+    
+    # Verify package integrity if sha256sum is available
+    if command -v sha256sum &>/dev/null; then
+        local stored_hash current_hash
+        stored_hash=$(echo "$kmscon_entry" | jq -r '.package_hash // empty' 2>/dev/null)
+        current_hash=$(sha256sum "$deb_path" | awk '{print $1}')
+        
+        if [[ "$stored_hash" != "$current_hash" ]]; then
+            log_warn "Hash do pacote em cache não corresponde, ignorando cache"
+            return 1
+        fi
+    fi
+    
+    echo "$deb_path"
+    return 0
+}
+
+
+
+# copy_cache_to_chroot removed (unused)
+
+setup_cache_in_chroot() {
+    log_info "Configurando cache no chroot..."
+    
+    # Create cache directory structure
+    mkdir -p "$CACHE_DIR"/{sources,build,packages,deps,lock}
+    
+    # If running in Docker, copy any existing cache from host mount
+    if [[ -d /host-cache ]] && [[ "$(ls -A /host-cache 2>/dev/null)" ]]; then
+        log_info "Copiando cache do host (/host-cache)..."
+        cp -r /host-cache/* "$CACHE_DIR/" 2>/dev/null || true
+    fi
+    
+    # Set appropriate permissions
+    chmod -R 755 "$CACHE_DIR" 2>/dev/null || true
+}
+
+install_from_cache() {
+    local deb_path="$1"
+    
+    log_info "Instalando pacote do cache: $(basename "$deb_path")"
+    
+    if ! dpkg -i "$deb_path"; then
+        log_warn "dpkg reportou erros, tentando corrigir dependências..."
+        apt-get install -f -y || {
+            log_error "Falha ao instalar pacote do cache"
+            return 1
+        }
+    fi
+    
+    return 0
+}
+
+configure_kmscon_services() {
+    log_info "Configurando serviços kmscon..."
+    
+    # Recarrega systemd
+    systemctl daemon-reload 2>/dev/null || {
+        log_warn "Não foi possível recarregar systemd"
+    }
+    
+    # Habilita kmscon nos TTYs 1 e 2
+    for vt in tty1 tty2; do
+        # Desabilita getty nestes TTYs
+        systemctl disable "getty@${vt}.service" 2>/dev/null || true
+        # Habilita kmscon
+        systemctl enable "kmscon-getty@${vt}.service" 2>/dev/null || {
+            log_warn "Não foi possível habilitar kmscon@${vt}"
+        }
+    done
+    
+    # Mantém getty nos TTYs 3-6 como fallback
+    for vt in tty3 tty4 tty5 tty6; do
+        systemctl enable "getty@${vt}.service" 2>/dev/null || true
+    done
+    
+    log_info "Serviços configurados"
+}
+
+verify_installation() {
+    log_info "Verificando instalação do kmscon..."
+    
+    # Verifica binário
+    if [[ ! -x /usr/bin/kmscon ]]; then
+        log_error "Binário /usr/bin/kmscon não encontrado"
+        return 1
+    fi
+    
+    # Verifica service file
+    if [[ ! -f /etc/systemd/system/kmscon-getty@.service ]]; then
+        log_warn "Service file não encontrado"
+    fi
+    
+    log_info "Instalação verificada com sucesso"
+    return 0
+}
+
+# =============================================================================
+# FUNÇÃO PRINCIPAL
+# =============================================================================
+
+main() {
+    echo "================================================"
+    echo "Hook KMSCON: Iniciando build do console KMS/DRM"
+    echo "================================================"
+    
+    # Verifica se o script de build existe
+    if [[ ! -f "$BUILD_SCRIPT" ]]; then
+        log_error "Script de build não encontrado: $BUILD_SCRIPT"
+        
+        # Tenta encontrar em locais alternativos
+        for path in \
+            /usr/local/bin/build-kmscon.sh \
+            /opt/build-kmscon.sh \
+            /tmp/build-kmscon.sh
+        do
+            if [[ -f "$path" ]]; then
+                BUILD_SCRIPT="$path"
+                log_info "Script encontrado em: $BUILD_SCRIPT"
+                break
+            fi
+        done
+        
+        if [[ ! -f "$BUILD_SCRIPT" ]]; then
+            log_error "Script de build não encontrado em nenhum local!"
+            exit 1
+        fi
+    fi
+    
+    # Setup cache structure
+    setup_cache_in_chroot
+    
+    # Check if we should use cache
+    local use_cache=false
+    local cached_deb=""
+    
+    if [[ "$KMSCON_CACHE_ENABLED" -eq 1 ]] && [[ "$KMSCON_CACHE_FORCE_REFRESH" -eq 0 ]]; then
+        log_info "Verificando disponibilidade de cache..."
+        
+        if detect_cache_availability; then
+            cached_deb=$(check_cached_package)
+            if [[ -n "$cached_deb" ]] && [[ -f "$cached_deb" ]]; then
+                use_cache=true
+                log_info "Pacote em cache encontrado: $(basename "$cached_deb")"
+            fi
+        fi
+    else
+        log_info "Cache desabilitado ou refresh forçado"
+    fi
+    
+    # Install from cache or build
+    if [[ "$use_cache" == "true" ]]; then
+        echo "================================================"
+        echo "Usando pacote pré-compilado do cache"
+        echo "================================================"
+        
+        if install_from_cache "$cached_deb"; then
+            log_info "Pacote instalado do cache com sucesso"
+        else
+            log_warn "Falha ao instalar do cache, tentando build..."
+            use_cache=false
+        fi
+    fi
+    
+    if [[ "$use_cache" != "true" ]]; then
+        echo "================================================"
+        echo "Executando build completo do kmscon..."
+        echo "================================================"
+        
+        # Executa o script de build com opções otimizadas para chroot
+        export KMSCON_CACHE_DIR="$CACHE_DIR"
+        export KMSCON_CACHE_ENABLED="$KMSCON_CACHE_ENABLED"
+        export KMSCON_DOCKER_MODE="$KMSCON_DOCKER_MODE"
+        export LOG_LEVEL="INFO"
+        
+        if ! bash "$BUILD_SCRIPT" --log-level INFO --jobs auto; then
+            log_error "Build do kmscon falhou"
+            exit 1
+        fi
+        
+        log_info "Build concluído com sucesso"
+    fi
+    
+    # Verify installation
+    if ! verify_installation; then
+        log_error "Verificação da instalação falhou"
+        exit 1
+    fi
+    
+    # Configure services
+    configure_kmscon_services
+    
+    # Show version info
+    echo "================================================"
+    echo "KMSCON instalado com sucesso!"
+    echo "================================================"
+    # NOTA: kmscon --version pode travar sem TTY/DRM, então não executamos
+    if [[ -x /usr/bin/kmscon ]]; then
+        echo "Binário: /usr/bin/kmscon ($(file /usr/bin/kmscon | grep -o 'ELF.*' | head -c 30))"
+    fi
+    echo "================================================"
+    
+    exit 0
+}
+
+# Executa main
+main "$@"

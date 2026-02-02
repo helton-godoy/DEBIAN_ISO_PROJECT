@@ -1,0 +1,61 @@
+[Unit]
+Description=KMS/DRM based system console on %I
+Documentation=man:kmscon(1) https://github.com/kmscon/kmscon
+After=systemd-user-sessions.service plymouth-quit-wait.service
+Before=getty.target
+After=systemd-vconsole-setup.service
+IgnoreOnIsolate=yes
+ConditionPathExists=/dev/tty0
+
+# Garante que o DRM está disponível
+Wants=systemd-modules-load.service
+After=systemd-modules-load.service
+
+[Service]
+Type=simple
+Environment="HOME=/root"
+Environment="XDG_RUNTIME_DIR=/run/user/0"
+WorkingDirectory=/root
+
+# Comando principal do kmscon
+# --vt=%I: Usa o VT especificado
+# --seats=seat0: Usa o seat primário
+# --no-switchvt: Não muda de VT automaticamente
+# --login: Habilita login
+ExecStart=/usr/bin/kmscon \
+    --vt=%I \
+    --seats=seat0 \
+    --no-switchvt \
+    --login \
+    -- /bin/login -p
+
+# Configurações de TTY
+StandardInput=tty
+StandardOutput=tty
+StandardError=tty
+TTYPath=/dev/%I
+TTYReset=yes
+TTYVHangup=yes
+TTYVTDisallocate=yes
+
+# Gerenciamento de processos
+KillMode=process
+IgnoreSIGPIPE=no
+SendSIGHUP=yes
+
+# Reinício em caso de falha (mas não spamma)
+Restart=always
+RestartSec=2
+StartLimitInterval=30
+StartLimitBurst=5
+
+# Segurança
+PrivateTmp=no
+PrivateDevices=no
+PrivateNetwork=yes
+ProtectSystem=no
+ProtectHome=no
+
+[Install]
+WantedBy=getty.target
+DefaultInstance=tty1

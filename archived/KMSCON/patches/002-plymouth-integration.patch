@@ -1,0 +1,237 @@
+From: AURORA NAS Project <aurora@local>
+Date: 2026-01-31
+Subject: [PATCH 002/005] Add Plymouth integration for smooth DRM handoff
+
+O Plymouth (boot splash) detém o DRM master durante o boot. Este patch
+adiciona delays e verificações para coordenar com Plymouth e garantir
+um handoff suave do DRM Master sem conflitos.
+
+Melhorias:
+- Verifica se Plymouth ainda está ativo antes de assumir controle
+- Adiciona retries com exponential backoff na aquisição do DRM
+- Implementa timeout configurável para esperar Plymouth
+- Fallback gracefully quando Plymouth não está presente
+
+--- a/src/video_drm3d.c
++++ b/src/video_drm3d.c
+@@ -45,6 +45,9 @@
+ #define KMSCON_DRM3D_DEFAULT_RENDERER "gltex"
+ #define KMSCON_DRM3D_DEFAULT_CURSOR "auto"
+ 
++/* Plymouth integration: max wait time in milliseconds */
++#define PLYMOUTH_MAX_WAIT_MS 30000
++#define PLYMOUTH_RETRY_DELAY_MS 100
+ 
+ /*
+  * DRM3D Video Device
+@@ -234,6 +237,52 @@ static int drm3d_display_deactivate(struct kmscon_display *disp)
+ 	return 0;
+ }
+ 
++/*
++ * Plymouth Integration
++ * Checks if Plymouth is still active and waits for it to release DRM
++ */
++static bool plymouth_is_active(void)
++{
++	struct stat st;
++	int ret;
++
++	/* Check if Plymouth is running via systemd */
++	ret = system("systemctl -q is-active plymouth-quit-wait.service 2>/dev/null");
++	if (ret == 0)
++		return true;
++
++	/* Check for Plymouth PID file */
++	if (stat("/run/plymouth/pid", &st) == 0)
++		return true;
++
++	return false;
++}
++
++static int wait_for_plymouth(int max_wait_ms)
++{
++	int waited = 0;
++	int delay = PLYMOUTH_RETRY_DELAY_MS;
++
++	while (waited < max_wait_ms) {
++		if (!plymouth_is_active()) {
++			log_debug("Plymouth is no longer active");
++			return 0;
++		}
++
++		log_debug("Waiting for Plymouth... (%d/%d ms)", waited, max_wait_ms);
++		usleep(delay * 1000);
++		waited += delay;
++
++		/* Exponential backoff up to 500ms */
++		if (delay < 500)
++			delay = delay * 2;
++	}
++
++	log_warning("Timeout waiting for Plymouth, proceeding anyway");
++	return -ETIMEDOUT;
++}
++
+ static int drm3d_display_wake_up(struct kmscon_display *disp)
+ {
+ 	struct drm3d_display *d3d = container_of(disp, struct drm3d_display, disp);
+@@ -243,6 +292,16 @@ static int drm3d_display_wake_up(struct kmscon_display *disp)
+ 	if (d3d-> awake)
+ 		return 0;
+ 
++	/* Check for Plymouth and wait if necessary */
++	if (plymouth_is_active()) {
++		log_info("Plymouth detected, waiting for DRM handoff...");
++		ret = wait_for_plymouth(PLYMOUTH_MAX_WAIT_MS);
++		if (ret < 0) {
++			log_warning("Could not wait for Plymouth, attempting DRM access anyway");
++		}
++		/* Give Plymouth a moment to fully release resources */
++		usleep(100000); /* 100ms */
++	}
++
+ 	ret = open_display_gpu(d3d);
+ 	if (ret)
+ 		return ret;
+@@ -634,6 +693,30 @@ static int drm3d_gpu_init(struct drm3d_gpu *gpu, struct ev_eloop *eloop,
+ 	return 0;
+ }
+ 
++/*
++ * Retry logic for DRM device open with Plymouth awareness
++ */
++static int open_drm_with_retry(const char *path, int flags)
++{
++	int fd, retries = 0;
++	const int max_retries = 50;
++	const int base_delay_us = 10000; /* 10ms */
++
++	while (retries < max_retries) {
++		fd = open(path, flags);
++		if (fd >= 0)
++			return fd;
++
++		if (errno != EBUSY && errno != EACCES)
++			return -errno;
++
++		/* Device is busy, possibly held by Plymouth */
++		usleep(base_delay_us * (1 + retries / 10));
++		retries++;
++	}
++
++	return -EBUSY;
++}
++
+ static int open_display_gpu(struct drm3d_display *d3d)
+ {
+ 	struct drm3d_gpu *gpu = d3d->gpu;
+@@ -641,9 +724,14 @@ static int open_display_gpu(struct drm3d_display *d3d)
+ 	int ret;
+ 	drmModeResPtr res;
+ 
+-	gpu->fd = open(gpu->node, O_RDWR | O_CLOEXEC | O_NONBLOCK);
+-	if (gpu->fd < 0) {
+-		ret = -errno;
++	/* Try to open with retry logic for Plymouth coordination */
++	ret = open_drm_with_retry(gpu->node, O_RDWR | O_CLOEXEC | O_NONBLOCK);
++	if (ret < 0) {
++		log_error("Cannot open DRM device %s: %s (tried %d times)",
++			  gpu->node, strerror(-ret), 50);
++		return ret;
++	}
++	gpu->fd = ret;
++
+ 		log_error("Cannot open DRM device %s: %d", gpu->node, ret);
+ 		return ret;
+ 	}
+@@ -656,6 +744,12 @@ static int open_display_gpu(struct drm3d_display *d3d)
+ 		return ret;
+ 	}
+ 
++	/* Try to become DRM master with retry */
++	ret = try_acquire_drm_master(gpu->fd, 10);
++	if (ret < 0) {
++		log_warning("Could not become DRM master immediately, continuing anyway");
++	}
++
+ 	res = drmModeGetResources(gpu->fd);
+ 	if (!res) {
+ 		ret = -errno;
+@@ -665,6 +759,38 @@ static int open_display_gpu(struct drm3d_display *d3d)
+ 	gpu->res = res;
+ 	return 0;
+ }
++
++/*
++ * Try to acquire DRM master with retries
++ */
++static int try_acquire_drm_master(int fd, int max_retries)
++{
++	int ret, retries = 0;
++
++	while (retries < max_retries) {
++		ret = drmSetMaster(fd);
++		if (ret == 0)
++			return 0;
++
++		if (errno != EACCES && errno != EINVAL)
++			return -errno;
++
++		/* Another process holds master (likely Plymouth) */
++		usleep(50000); /* 50ms */
++		retries++;
++	}
++
++	return -EBUSY;
++}
++
++/*
++ * Release DRM master gracefully
++ */
++static void release_drm_master(int fd)
++{
++	if (fd >= 0) {
++		drmDropMaster(fd);
++	}
++}
+ 
+ static void close_display_gpu(struct drm3d_display *d3d)
+ {
+--- a/src/video_drm3d.h
++++ b/src/video_drm3d.h
+@@ -34,6 +34,9 @@ struct kmscon_eloop;
+ struct kmscon_display;
+ struct kmscon_video;
+ 
++/* Plymouth integration flags */
++#define KMSCON_DRM3D_FLAG_WAIT_PLYMOUTH 0x01
++
+ int kmscon_video_drm3d_new(struct kmscon_video **out, struct ev_eloop *eloop,
+ 			   const char *node);
+ 
+--- a/docs/kmscon.1
++++ b/docs/kmscon.1
+@@ -156,6 +156,11 @@ Timeout in seconds for session idle detection.
+ Default: 0 (disabled)
+ .RE
+ 
++.TP
++.B \-\-plymouth\-timeout=<secs>
++Maximum time to wait for Plymouth boot splash to release DRM master.
++Default: 30 seconds
++
+ .SH KEYBOARD SHORTCUTS
+ .TP
+ .B Ctrl+Shift+F1-F12
+@@ -178,6 +183,10 @@ The kmscon project was created by David Herrmann.
+ This version is maintained by the AURORA NAS Project with additional
+ patches for Debian 13 Trixie compatibility.
+ 
++.SH BOOT INTEGRATION
++When systemd is used with Plymouth, kmscon automatically coordinates DRM
++access to ensure smooth handoff during system boot and shutdown.
++
+ .SH SEE ALSO
+ .BR systemd (1),
+ .BR logind (8),

@@ -1,0 +1,81 @@
+#!/bin/bash
+# =============================================================================
+# Hook: Salva módulos DKMS compilados para cache
+# =============================================================================
+# Executado APÓS todos os hooks para salvar os módulos para próximos builds
+# NOTA: Este é executado como último hook (9999)
+# =============================================================================
+
+set -e
+
+CACHE_DIR="/var/cache/dkms-modules"
+MANIFEST_FILE="${CACHE_DIR}/.manifest.json"
+
+log_info() { echo "[save-dkms] [INFO] $1"; }
+log_warn() { echo "[save-dkms] [WARN] $1" >&2; }
+
+# Detecta kernel atual
+CURRENT_KERNEL=$(ls /lib/modules/ 2>/dev/null | grep -E '^[0-9]+\.' | sort -V | tail -1)
+
+if [[ -z "$CURRENT_KERNEL" ]]; then
+    log_warn "Nenhum kernel encontrado em /lib/modules/"
+    exit 0
+fi
+
+# Verifica se ZFS está instalado
+if [[ ! -d "/var/lib/dkms/zfs" ]]; then
+    log_warn "ZFS DKMS não encontrado, nada para salvar"
+    exit 0
+fi
+
+# Detecta versão do ZFS
+ZFS_VERSION=$(ls /var/lib/dkms/zfs/ 2>/dev/null | grep -E '^[0-9]+\.' | head -1)
+
+if [[ -z "$ZFS_VERSION" ]]; then
+    log_warn "Versão do ZFS não detectada"
+    exit 0
+fi
+
+log_info "Salvando módulos DKMS para cache..."
+log_info "Kernel: $CURRENT_KERNEL"
+log_info "ZFS: $ZFS_VERSION"
+
+# Limpa cache antigo
+rm -rf "$CACHE_DIR"
+mkdir -p "$CACHE_DIR"
+
+# Salva /var/lib/dkms/zfs
+if [[ -d "/var/lib/dkms/zfs" ]]; then
+    mkdir -p "${CACHE_DIR}/var-lib-dkms"
+    cp -a /var/lib/dkms/zfs "${CACHE_DIR}/var-lib-dkms/" 2>/dev/null || true
+    log_info "Salvo: /var/lib/dkms/zfs"
+fi
+
+# Salva módulos do kernel
+if [[ -d "/lib/modules/${CURRENT_KERNEL}/updates" ]]; then
+    mkdir -p "${CACHE_DIR}/lib-modules/${CURRENT_KERNEL}"
+    cp -a "/lib/modules/${CURRENT_KERNEL}/updates" \
+        "${CACHE_DIR}/lib-modules/${CURRENT_KERNEL}/" 2>/dev/null || true
+    log_info "Salvo: /lib/modules/${CURRENT_KERNEL}/updates"
+fi
+
+# Cria manifest
+cat > "$MANIFEST_FILE" <<EOF
+{
+    "created_at": "$(date -Iseconds)",
+    "kernel_version": "$CURRENT_KERNEL",
+    "zfs_version": "$ZFS_VERSION",
+    "hostname": "$(hostname)",
+    "files": {
+        "var_lib_dkms": $(find "${CACHE_DIR}/var-lib-dkms" -type f 2>/dev/null | wc -l),
+        "lib_modules": $(find "${CACHE_DIR}/lib-modules" -type f 2>/dev/null | wc -l)
+    }
+}
+EOF
+
+log_info "Manifest criado: $MANIFEST_FILE"
+
+# Verifica tamanho
+CACHE_SIZE=$(du -sh "$CACHE_DIR" 2>/dev/null | cut -f1)
+log_info "Cache de módulos DKMS salvo: $CACHE_SIZE"
+log_info "Próximo build reutilizará estes módulos se o kernel for compatível!"
