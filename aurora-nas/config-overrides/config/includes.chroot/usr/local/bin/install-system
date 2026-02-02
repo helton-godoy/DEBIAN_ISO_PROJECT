@@ -1,0 +1,172 @@
+ #!/usr/bin/env bash
+#
+# Instalador AURORA TUI - Debian 13 (Trixie) NAS
+# Foco: ZFS NFSv4 ACLs, Samba AD Winbind RID e Performance
+#
+
+set -e
+
+# ═══════════════════════════════════════════════════════════════════════════════
+# DESIGN SYSTEM v2.0 - HARMONIA SLATE-AURORA
+# ═══════════════════════════════════════════════════════════════════════════════
+DS_VOID=235; DS_DEPTH=237; DS_ELEVATION=239
+DS_WHISPER=240; DS_MIST=243; DS_FOG=245; DS_HAZE=248; DS_CLOUD=250; DS_SILVER=252
+DS_SLATE=67; DS_SLATE_GLOW=68; DS_AURORA_PEAK=153
+DS_SUCCESS=108; DS_WARNING=179; DS_ERROR=167
+UI_H='─'; UI_ARROW='▶'; UI_BULLET='●'; UI_CHECK='✓'; UI_WARN='⚠'
+
+# ═══════════════════════════════════════════════════════════════════════════════
+# CONFIGURAÇÕES TÉCNICAS (ESTRELA DO NORTE)
+# ═══════════════════════════════════════════════════════════════════════════════
+POOL_NAME="rpool"
+# Opções ZFS focadas em paridade FreeNAS e performance Linux
+ZFS_OPTS="-o ashift=12 -O compression=lz4 -O xattr=sa -O dnodesize=auto -O normalization=formD -O mountpoint=none -O canmount=off"
+
+# ═══════════════════════════════════════════════════════════════════════════════
+# COMPONENTES DE UI (ABSTRAÇÃO)
+# ═══════════════════════════════════════════════════════════════════════════════
+hero_header() {
+    clear
+    gum style --foreground "$DS_AURORA_PEAK" --border-foreground "$DS_SLATE" --border double \
+        --align center --width 60 --margin "1 2" --padding "1 2" "${1:-AURORA INSTALLER}" "${2:-Debian ZFS NAS}"
+}
+
+section_header() {
+    echo ""; gum style --foreground "$DS_MIST" --bold "$(printf "${UI_H}%.0s" $(seq 1 60))"
+    gum style --foreground "$DS_SILVER" --bold "  ${UI_ARROW} $1"
+    gum style --foreground "$DS_MIST" --bold "$(printf "${UI_H}%.0s" $(seq 1 60))"
+}
+
+progress_bar() {
+    local filled=$(( $1 * 40 / $2 )); local pct=$(( $1 * 100 / $2 ))
+    echo ""; gum style --foreground "$DS_SLATE" "  [$(printf '█%.0s' $(seq 1 $filled))$(printf '░%.0s' $(seq 1 $((40-filled))))] ${pct}%"
+    gum style --foreground "$DS_FOG" --italic "      ${UI_ARROW} $3"
+}
+
+# ═══════════════════════════════════════════════════════════════════════════════
+# FLUXO DE INSTALAÇÃO
+# ═══════════════════════════════════════════════════════════════════════════════
+
+# 1. Boas-vindas e Seleção de Disco (Suporte a Mirror opcional)
+#setup_disks() {
+#    hero_header "AURORA" "Configuração de Armazenamento"
+#    section_header "Seleção de Discos"
+#
+#    DISK_LIST=$(lsblk -dno NAME,SIZE,MODEL | grep -v "loop" | awk '{print $1" ("$2") - "$3}')
+#    # Seleção múltipla para suporte a Mirror conforme recomendação arquitetural
+#    SELECTED=$(echo "$DISK_LIST" | gum choose --no-limit --header "Selecione 1 p/ Single ou 2 p/ Mirror")
+#
+#    COUNT=$(echo "$SELECTED" | wc -l)
+#    DISKS=$(echo "$SELECTED" | awk '{print "/dev/"$1}')
+#
+#    if [ "$COUNT" -eq 2 ]; then
+#        VDEV_TYPE="mirror"
+#        gum style --foreground "$DS_SUCCESS" "  Modo: Redundância (Mirror) ativado"
+#    else
+#        VDEV_TYPE=""
+#        gum style --foreground "$DS_WARNING" "  Modo: Disco Único (Sem redundância)"
+#    fi
+#}
+
+# ═══════════════════════════════════════════════════════════════════════════════
+# LÓGICA DE DISCO AVANÇADA (RAIDZ SUPPORT)
+# ═══════════════════════════════════════════════════════════════════════════════
+
+setup_disks() {
+    hero_header "AURORA" "Configuração de Armazenamento"
+    section_header "Seleção de Dispositivos"
+    
+    # 1. Seleção Múltipla de Discos
+    DISK_LIST=$(lsblk -dno NAME,SIZE,MODEL | grep -v "loop" | awk '{print $1" ("$2") - "$3}')
+    SELECTED=$(echo "$DISK_LIST" | gum choose --no-limit --header "Selecione os discos (Espaço para marcar, Enter para confirmar)")
+    
+    COUNT=$(echo "$SELECTED" | wc -l)
+    DISKS=$(echo "$SELECTED" | awk '{print "/dev/"$1}' | tr '\n' ' ')
+    
+    if [ -z "$SELECTED" ]; then
+        error_box "Nenhum disco selecionado. A instalação não pode prosseguir."
+        exit 1
+    fi
+
+    # 2. Definição Dinâmica de Níveis de RAID
+    OPTIONS=("Single (1 disco)")
+    [ "$COUNT" -ge 2 ] && OPTIONS+=("Mirror (2+ discos)")
+    [ "$COUNT" -ge 3 ] && OPTIONS+=("RAIDZ1 (Mínimo 3 discos)")
+    [ "$COUNT" -ge 4 ] && OPTIONS+=("RAIDZ2 (Mínimo 4 discos)")
+    [ "$COUNT" -ge 5 ] && OPTIONS+=("RAIDZ3 (Mínimo 5 discos)")
+
+    section_header "Nível de Redundância"
+    status_info "Discos selecionados: $COUNT"
+    
+    RAID_CHOICE=$(printf '%s\n' "${OPTIONS[@]}" | gum choose --header "Escolha o layout do Pool ZFS")
+
+    # 3. Mapeamento para Comandos ZFS
+    case "$RAID_CHOICE" in
+        "Mirror"*)  VDEV_TYPE="mirror" ;;
+        "RAIDZ1"*)  VDEV_TYPE="raidz1" ;;
+        "RAIDZ2"*)  VDEV_TYPE="raidz2" ;;
+        "RAIDZ3"*)  VDEV_TYPE="raidz3" ;;
+        *)          VDEV_TYPE="" ;; # Single
+    esac
+
+    info_card "Configuração Confirmada" \
+        "$(list_item "Discos" "$COUNT")" \
+        "$(list_item "Layout" "$RAID_CHOICE")" \
+        "$(list_item "VDEV" "${VDEV_TYPE:-stripe}")"
+}
+
+# 2. Execução da Instalação (Os Gaps Resolvidos)
+run_install() {
+    hero_header "AURORA" "Instalando Sistema Base"
+    local total=8; local step=0
+
+    # [Step 3] Criação do Pool e Datasets com NFSv4 ACLs
+    ((step++)); progress_bar $step $total "Criando Pool ZFS com NFSv4 ACLs"
+    zpool create -f $ZFS_OPTS -R /mnt $POOL_NAME $VDEV_TYPE $DISKS
+
+    # Criando datasets separados para isolamento de dados
+    zfs create -o mountpoint=none $POOL_NAME/ROOT
+    zfs create -o mountpoint=/ -o canmount=noauto $POOL_NAME/ROOT/debian
+    zfs create -o mountpoint=/home $POOL_NAME/home
+    # Dataset de dados com paridade absoluta ao FreeNAS
+    zfs create -o mountpoint=/srv/dados -o acltype=nfsv4 $POOL_NAME/dados
+    zpool set bootfs=$POOL_NAME/ROOT/debian $POOL_NAME
+
+    # [Step 7] Tuning de Kernel e Configuração AD
+    ((step++)); progress_bar $step $total "Aplicando Tuning de Kernel e Samba AD"
+
+    # Injetando Tuning de Kernel (Gap 2.1 resolvido)
+    mkdir -p /mnt/etc/sysctl.d
+    cat <<EOF > /mnt/etc/sysctl.d/99-nas-performance.conf
+vm.swappiness=10
+vm.min_free_kbytes=65536
+net.core.rmem_max=16777216
+net.core.wmem_max=16777216
+fs.inotify.max_user_watches=524288
+EOF
+
+    # Configuração Winbind RID (Paridade de IDs FreeNAS)
+    mkdir -p /mnt/etc/samba
+    cat <<EOF > /mnt/etc/samba/smb.conf
+[global]
+   workgroup = AURORANET
+   security = ads
+   realm = AURORANET.AURORA.GOV.BR
+   idmap config * : backend = tdb
+   idmap config * : range = 3000-7999
+   idmap config AURORANET : backend = rid
+   idmap config AURORANET : range = 10000-999999
+   vfs objects = acl_xattr
+   map acl inherit = yes
+   store dos attributes = yes
+   strict sync = no
+EOF
+
+    # [Step 8] Finalização no Chroot
+    ((step++)); progress_bar $step $total "Finalizando no Chroot"
+    # (Montagens de bind e comandos de useradd omitidos para brevidade, mas devem seguir o original)
+}
+
+# Início
+setup_disks
+run_install

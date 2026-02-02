@@ -1,0 +1,6 @@
+ # Terminal Avançado e Fontes para o Design System v2.0
+kmscon
+libpango1.0-0
+fonts-noto-mono
+fonts-font-awesome
+gum # Para os componentes interativos do DS v2.0
