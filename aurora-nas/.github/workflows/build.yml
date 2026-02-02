@@ -1,0 +1,22 @@
+name: Aurora ISO CI
+on: [push]
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: [actions/checkout](https://github.com)@v4
+      
+      - name: Cache APT Packages
+        uses: [actions/cache](https://github.com)@v4
+        with:
+          path: cache
+          key: apt-cache-${{ runner.os }}-${{ hashFiles('config-overrides/config/package.lists/*.list.chroot') }}
+
+      - name: Build ISO
+        run: sudo make build  # sudo é necessário para --privileged no GH Actions
+
+      - name: Upload ISO
+        uses: [actions/upload-artifact](https://github.com)@v4
+        with:
+          name: aurora-iso
+          path: output/*.iso
